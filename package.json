@@ -1,0 +1,29 @@
+{
+  "name": "traccar-subscription-system",
+  "version": "1.0.0",
+  "description": "Full-stack Traccar GPS subscription management system with Telebirr payment integration",
+  "scripts": {
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:dev": "cd backend && npm run dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "build": "npm run backend:build && npm run frontend:build",
+    "backend:build": "cd backend && npm run build",
+    "frontend:build": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "vite": "^7.1.2"
+  },
+  "dependencies": {
+    "@types/node-forge": "^1.3.14",
+    "@yaga/leaflet-cached-tile-layer": "^1.0.0",
+    "maplibre-gl": "^5.7.3",
+    "mysql2": "^3.14.3",
+    "node-forge": "^1.3.1",
+    "react-map-gl": "^8.0.4",
+    "react-scroll": "^1.9.3"
+  }
+}

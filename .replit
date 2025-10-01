@@ -1,0 +1,41 @@
+modules = ["nodejs-20", "web"]
+run = "npm run dev"
+
+[nix]
+channel = "stable-25_05"
+
+[deployment]
+run = ["sh", "-c", "npm run dev"]
+
+[[ports]]
+localPort = 3001
+externalPort = 80
+
+[[ports]]
+localPort = 5173
+externalPort = 3001
+
+
+
+[workflows]
+
+[[workflows.workflow]]
+name = "Start Database"
+author = 46063448
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mysqld --initialize-insecure --datadir=./data"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mysqld --datadir=./data --socket=/tmp/mysql.sock --port=3306 &"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "sleep 5"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mysql -u root -e \"CREATE DATABASE IF NOT EXISTS gps_tracker;\""
