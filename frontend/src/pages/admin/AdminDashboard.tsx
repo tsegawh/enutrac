@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Users, CreditCard, Smartphone, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
+import axiosInstance from '../../utils/axiosInstance';
+import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 interface AdminStats {
@@ -12,16 +14,19 @@ interface AdminStats {
 }
 
 export default function AdminDashboard() {
+  const { token, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authLoading && token) {
     fetchStats();
-  }, []);
+  }
+}, [authLoading, token]);
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('/admin/stats');
+      const response = await axiosInstance.get('/admin/stats');
       setStats(response.data.stats);
     } catch (error) {
       console.error('Error fetching admin stats:', error);
@@ -33,7 +38,7 @@ export default function AdminDashboard() {
 
   const sendReminders = async () => {
     try {
-      const response = await axios.post('/admin/users/send-reminders');
+      const response = await axios.post('/admin/send-reminders');
       toast.success(response.data.message);
     } catch (error: any) {
       const message = error.response?.data?.error || 'Failed to send reminders';

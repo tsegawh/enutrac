@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart3, MapPin, Calendar, Download, Smartphone, Users } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import DeviceReportsModal from '../../components/AdminDeviceReports';
 import { useAuth } from '../../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+//import { Navigate } from 'react-router-dom';
 
 interface Device {
   id: string;
   name: string;
   uniqueId: string;
   traccarId: number;
-  lastUpdate: string | null;
+  lastUpdate: number | null;
   latitude: number | null;
   longitude: number | null;
   speed: number | null;
@@ -29,7 +29,7 @@ interface User {
 }
 
 export default function AdminReports() {
-  const { user } = useAuth();
+   useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [filteredDevices, setFilteredDevices] = useState<Device[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -216,11 +216,18 @@ export default function AdminReports() {
                 onClick={() => {
                   console.log(`Opening reports for device ID: ${device.id}`);
                   setSelectedDevice({
-                    id: device.id,
-                    name: device.name,
-                    uniqueId: device.uniqueId,
-                    userEmail: device.userEmail,
-                    traccarId: device.traccarId,
+                   id: device.id,
+    name: device.name,
+    uniqueId: device.uniqueId,
+    userEmail: device.userEmail ,
+    traccarId: device.traccarId,
+    lastUpdate: device.lastUpdate,
+    latitude: device.latitude,
+    longitude: device.longitude,
+    speed: device.speed,
+    course: device.course,
+    isActive: device.isActive,
+    userId: device.userId || null, 
                   });
                 }}
               >

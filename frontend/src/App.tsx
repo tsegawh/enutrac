@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
+import OAuthSuccess from './pages/OAuthSuccess';
 // Context Providers
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
@@ -21,7 +22,7 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Devices = React.lazy(() => import('./pages/Devices'));
 const PaymentSuccess = React.lazy(() => import('./pages/PaymentSuccess'));
 const PaymentCancel = React.lazy(() => import('./pages/PaymentCancel'));
-const OrdersSummary = React.lazy(() => import('./pages/OrdersSummary'));
+const OrderReports = React.lazy(() => import('./pages/OrderReports'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const Account = React.lazy(() => import('./pages/Account'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
@@ -36,7 +37,8 @@ const AdminUsers = React.lazy(() => import('./pages/admin/AdminUsers'));
 const AdminSubscriptions = React.lazy(() => import('./pages/admin/AdminSubscriptions'));
 const AdminDevices = React.lazy(() => import('./pages/admin/AdminDevices'));
 const AdminPayments = React.lazy(() => import('./pages/admin/AdminPayments'));
-const AdminOrdersPayments = React.lazy(() => import('./pages/admin/AdminOrdersPayments'));
+const AdminOrderReports = React.lazy(() => import('./pages/admin/AdminOrderReports'));
+
 const AdminSettings = React.lazy(() => import('./pages/admin/AdminSettings'));
 
 function App() {
@@ -49,6 +51,7 @@ function App() {
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<Home />} />
+ <Route path="/oauth-success" element={<OAuthSuccess />}/>
               <Route path="/about" element={<About />} />
                <Route path="/supported-devices" element={<SupportedDevices />} />
                 <Route path="/login" element={<Login />} />
@@ -70,7 +73,8 @@ function App() {
                   <Route index element={<Dashboard />} />
                   <Route path="devices" element={<Devices />} />
                 <Route path="reports" element={<Reports />} />
-                 <Route path="orders" element={<OrdersSummary />} />
+                
+         <Route path="orders" element={<OrderReports />} />
                 <Route path="account" element={<Account />} />
                 </Route>
 
@@ -89,7 +93,8 @@ function App() {
                   <Route path="devices" element={<AdminDevices />} />
                   <Route path="payments" element={<AdminPayments />} />
                    <Route path="reports" element={<AdminReports />} />
-<Route path="orders" element={<AdminOrdersPayments />} />
+             
+        <Route path="adminorders" element={<AdminOrderReports />} />
                   <Route path="settings" element={<AdminSettings />} />
                   
                 </Route>

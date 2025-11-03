@@ -7,31 +7,31 @@ import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
-
+const prisma = new PrismaClient();
 router.get('/:id/invoice', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { orderId } = req.params;
 
-    const subscription = await prisma.subscription.findUnique({
-      where: { id },
+     const payment = await prisma.payment.findFirst({
+      where: { orderId },
       include: {
-        user: true,
-        plan: true,
-        payment: true,
-      },
+        user: { select: { id: true, name: true, email: true } },
+        plan: { select: { name: true, deviceLimit: true, durationDays: true } }
+      }
     });
 
-    if (!subscription) {
+
+    if (!payment ) {
       return res.status(404).json({ message: 'Subscription not found' });
     }
 
-    const { user, plan, payment } = subscription;
+    const { user, plan,  } = payment ;
 
     // --- Set PDF Headers ---
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename=invoice-${payment?.orderId || subscription.id}.pdf`
+      `attachment; filename=invoice-${payment?.orderId || payment.id}.pdf`
     );
 
     const doc = new PDFDocument({ margin: 50 });
@@ -61,9 +61,9 @@ router.get('/:id/invoice', async (req: Request, res: Response) => {
 
     doc.fontSize(12).text('Invoice Details:', 300, 160);
     doc.fontSize(10)
-      .text(`Invoice #: ${payment?.orderId || subscription.id}`, 300, 175)
-      .text(`Date: ${moment(payment?.createdAt || subscription.startDate).format('MMM D, YYYY')}`, 300, 190)
-      .text(`Due Date: ${moment(subscription.endDate).format('MMM D, YYYY')}`, 300, 205);
+      .text(`Invoice #: ${payment?.orderId || payment.id}`, 300, 175)
+      .text(`Date: ${moment(payment?.createdAt || plan?.durationDays).format('MMM D, YYYY')}`, 300, 190)
+      .text(`Due Date: ${moment(plan?.durationDays).format('MMM D, YYYY')}`, 300, 205);
 
     doc.moveDown(4);
 
@@ -80,7 +80,7 @@ router.get('/:id/invoice', async (req: Request, res: Response) => {
     // === Table Row ===
     const rowY = tableTop + 35;
     doc.fontSize(10).fillColor('#000');
-    doc.text(`${plan.name} Subscription`, 50, rowY);
+    doc.text(`${plan?.name} Subscription`, 50, rowY);
     doc.text('1', 300, rowY, { width: 90, align: 'right' });
     doc.text(`${payment?.amount.toFixed(2)} ${payment?.currency}`, 350, rowY, { width: 90, align: 'right' });
     doc.text(`${payment?.amount.toFixed(2)} ${payment?.currency}`, 450, rowY, { width: 90, align: 'right' });

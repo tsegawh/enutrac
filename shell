@@ -1,2 +1,0 @@
-npx prisma studio
-apt-get update && apt-get install -y mysql-client

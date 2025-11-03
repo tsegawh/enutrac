@@ -6,18 +6,33 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import nodemailer from 'nodemailer';
+import { loginLimiter } from '../middleware/rateLimit';
+import passport from "../services/googleAuth";
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // Email transporter setup
-const emailTransporter = nodemailer.createTransport({
+/**const emailTransporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.EMAIL_PORT || '587'),
   secure: false,
   auth: {
-    user: 'bluetsegaw@gmail.com',
-    pass: 'pass6983@Bigt',
+    user: 'bluetsegaw,
+    pass: 'pas',
+  },
+});
+**/
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.office365.com',
+  port: 587,
+  secure: false, // TLS will be upgraded automatically
+  auth: {
+    user: process.env.OUTLOOK_EMAIL, // your Outlook email (e.g. yourname@outlook.com)
+    pass: process.env.OUTLOOK_PASSWORD, // your Outlook password or App Password
+  },
+  tls: {
+    ciphers: 'SSLv3',
   },
 });
 
@@ -94,7 +109,7 @@ router.post('/register', async (req, res, next) => {
 });
 
 // Login
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -145,10 +160,11 @@ router.post('/login', async (req, res, next) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/me', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
      const user = await prisma.user.findUnique({
-  where: { id: req.user!.id },
+  where: { id: authReq.user!.id },
   select: {
     id: true,
     email: true,
@@ -328,5 +344,22 @@ router.post('/reset-password', async (req, res, next) => {
     next(error);
   }
 });
+
+// --- Google OAuth2 routes ---
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
+
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false }),
+  (req: any, res) => {
+    const { token, user } = req.user;
+    // Redirect to frontend with token
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
+  }
+);
+
 
 export default router;

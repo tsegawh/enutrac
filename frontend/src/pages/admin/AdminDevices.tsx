@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Smartphone, MapPin, Battery, Signal, Map } from 'lucide-react';
@@ -10,9 +10,12 @@ interface Device {
   name: string;
   imei: string;
   isActive: boolean;
-  latitude?: number;
-  longitude?: number;
-  lastUpdate?: string;
+  latitude: number | null;
+  longitude: number | null;
+  lastUpdate: string | null;
+  speed: number | null;
+  course: number | null;
+   uniqueId: string;
   user: {
     id: string;
     name: string;
@@ -23,7 +26,7 @@ interface Device {
 export default function AdminDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('ALL');
+  const [filter] = useState('ALL');
   const [showMap, setShowMap] = useState(false);
 
   useEffect(() => {

@@ -2,24 +2,27 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
+import { HttpStatusCode } from 'axios';
+import { STATUS_CODES } from 'http';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-router.get('/', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/', authenticateToken, async (req, res, next) => {
   try {
-    if (!req.user) return next(createError(401, 'Unauthorized'));
+     const authReq = req as AuthRequest;
+    if (!authReq.user) return next(createError('Unauthorized', 401 ));
 
     // Get user data
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: authReq.user.id },
       include: {
         subscription: { include: { plan: true } },
         devices: true,
       },
     });
 
-    if (!user) return next(createError(404, 'User not found'));
+    if (!user) return next(createError( 'User not found',401));
 
     // Prepare user stats
     const userStats = {
@@ -35,7 +38,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res, next) => {
 
     // Prepare admin stats only if user is ADMIN
     let adminStats = null;
-    if (req.user.role === 'ADMIN') {
+    if (authReq.user.role === 'ADMIN') {
       const [usersCount, devicesCount, subscriptionsCount] = await Promise.all([
         prisma.user.count(),
         prisma.device.count(),

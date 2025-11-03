@@ -281,7 +281,7 @@ const signature = this.createSignature(signString);
   try {
     parsed = JSON.parse(response.data);
     console.log("⬅️ Parsed JSON Response:", parsed);
-  } catch (e) {
+  } catch (e:any) {
     console.error("❌ Failed to parse response JSON:", e.message);
     throw new Error(`Telebirr returned non-JSON response: ${response.data}`);
   }

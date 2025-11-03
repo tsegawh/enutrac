@@ -25,7 +25,9 @@ router.get('/route', async (req, res) => {
     }
 
     // Fetch report from Traccar
-    const report = await traccar.getReport('route', deviceIds, String(from), String(to));
+    // Convert deviceId to number
+    const deviceIdNum = Number(deviceId);
+    const report = await traccar.getReport('route', deviceIdNum, String(from), String(to));
 
     res.json({ report });
   } catch (err: any) {

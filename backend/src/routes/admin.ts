@@ -3,17 +3,24 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { TraccarService } from '../services/traccar';
+import PDFDocument from 'pdfkit';
+import { InvoiceGenerator } from '../services/invoiceGenerator';
 
+import { loadCronJob } from '../cron/expirePendingPayments'; // 
+import { sendInvoiceEmail } from '../services/mailer'; // your email file
 const router = express.Router();
 const prisma = new PrismaClient();
 const traccarService = new TraccarService();
 
 // Apply admin middleware to all routes
-router.use(authenticateToken, requireAdmin);
+router.use(authenticateToken,requireAdmin);
 
 // Get dashboard statistics
-router.get('/stats', async (req, res, next) => {
+// Dashboard statistics
+router.get('/stats', async (req, res , next) => {
+  
   try {
+    
     const [
       totalUsers,
       activeSubscriptions,
@@ -24,29 +31,24 @@ router.get('/stats', async (req, res, next) => {
       prisma.user.count(),
       prisma.subscription.count({ where: { status: 'ACTIVE' } }),
       prisma.device.count({ where: { isActive: true } }),
-      prisma.payment.aggregate({
-        where: { status: 'COMPLETED' },
-        _sum: { amount: true }
-      }),
-      prisma.subscription.count({
-        where: {
-          status: 'ACTIVE',
-          endDate: {
-            lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Next 7 days
-          }
-        }
+      prisma.payment.aggregate({ where: { status: 'COMPLETED' }, _sum: { amount: true } }),
+      prisma.subscription.count({ 
+        where: { 
+          status: 'ACTIVE', 
+          endDate: { lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } 
+        } 
       })
     ]);
 
-    const stats = {
-      totalUsers,
-      activeSubscriptions,
-      totalDevices,
-      totalRevenue: totalRevenue._sum.amount || 0,
-      expiringSubscriptions,
-    };
-
-    res.json({ stats });
+    res.json({
+      stats: {
+        totalUsers,
+        activeSubscriptions,
+        totalDevices,
+        totalRevenue: totalRevenue._sum.amount || 0,
+        expiringSubscriptions
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -221,22 +223,87 @@ router.put('/settings', async (req, res, next) => {
     }
 
     // Update each setting
+ 
     for (const [key, value] of Object.entries(settings)) {
+      // Skip functions
+      //if (typeof value === 'function') continue;
+if (value === undefined || typeof value === 'function') continue;
+
+      let storedValue: string;
+
+      if (typeof value === 'object') {
+        // Serialize objects/arrays to JSON
+        storedValue = JSON.stringify(value);
+      } else {
+        // Convert booleans/numbers/strings to string
+        storedValue = value.toString();
+      }
+
       await prisma.settings.upsert({
         where: { key },
-        update: { value: value as string },
-        create: { key, value: value as string }
+        update: { value: storedValue },
+        create: { key, value: storedValue },
       });
     }
 
-    res.json({ 
+    // Reload cron job after saving
+    await loadCronJob();
+
+    res.json({
       success: true,
-      message: 'Settings updated successfully' 
+      message: 'Settings updated successfully',
     });
   } catch (error) {
+    console.error('Error updating settings:', error);
     next(error);
   }
 });
+router.get('/cron-settings', async (req, res, next) => {
+  try {
+    const keys = [
+      'cronEnabled', 'cronSchedule', 'cronCutoffHours',
+      'subscriptionCronEnabled', 'subscriptionCronScheduleExpire', 'subscriptionCronScheduleReminder',
+      'deviceCronEnabled', 'deviceCronSchedule',
+      'reportCronEnabled', 'reportCronScheduleDaily', 'reportCronScheduleWeekly',
+      'emailCronEnabled', 'emailCronSchedule',
+      'maintenanceCronEnabled', 'maintenanceCronSchedule',
+      'healthCronEnabled', 'healthCronSchedule'
+    ];
+
+    const settings = await prisma.settings.findMany({ where: { key: { in: keys } } });
+
+    const data: Record<string, string> = {};
+    settings.forEach(s => data[s.key] = s.value);
+
+    res.json({ success: true, settings: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update cron settings
+router.put('/cron-settings', async (req, res, next) => {
+  try {
+    const { settings } = req.body;
+    if (!settings || typeof settings !== 'object') throw new Error('Settings object is required');
+
+    for (const [key, value] of Object.entries(settings)) {
+     if (value === undefined || value === null) continue;
+      await prisma.settings.upsert({
+        where: { key },
+        update: { value: value.toString() }, // ensure string
+        create: { key, value: value.toString() }
+      });
+    }
+
+    await loadCronJob(); // reload cron jobs dynamically
+
+    res.json({ success: true, message: 'Cron settings updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // Get payment transactions
 router.get('/payments', async (req, res, next) => {
@@ -272,7 +339,7 @@ router.post('/send-reminders', async (req, res, next) => {
       where: {
         status: 'ACTIVE',
         endDate: {
-          lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
           gte: new Date()
         }
       },
@@ -283,8 +350,16 @@ router.post('/send-reminders', async (req, res, next) => {
     });
 
     // TODO: Implement email sending logic here
-    // For now, just return the count
-    
+   
+     for (const sub of expiringSubscriptions) {
+      await sendInvoiceEmail(
+        sub.user.email,
+        'Subscription Expiring Soon',
+        `<p>Hi ${sub.user.name},</p>
+         <p>Your <strong>${sub.plan.name}</strong> subscription expires on ${sub.endDate.toDateString()}.</p>
+         <p>Please renew to continue using our service.</p>`
+      );
+    }
     res.json({ 
       success: true,
       message: `Reminder emails sent to ${expiringSubscriptions.length} users`,
@@ -322,8 +397,9 @@ router.post('/test-traccar', async (req, res, next) => {
     });
   }
 });
-router.get('/devices/:id/positions', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/devices/:id/positions', authenticateToken, async (req, res, next) => {
   try {
+    
     const { id } = req.params;
     const { from, to } = req.query;
 
@@ -353,15 +429,16 @@ router.get('/devices/:id/positions', authenticateToken, async (req: AuthRequest,
   }
 });
 
-// Get device reports
+
 // GET /api/admin/devices/:id/reports
-router.get('/devices/:id/reports', authenticateToken, requireAdmin, async (req: AuthRequest, res, next) => {
+router.get('/devices/:id/reports', authenticateToken, requireAdmin, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const { id } = req.params;
     const { from, to } = req.query;
 
     console.log(`Fetching admin reports for device ID: ${id}`);
-    console.log(`Authenticated user ID: ${req.user!.id}`);
+    console.log(`Authenticated user ID: ${authReq.user!.id}`);
 
     const device = await prisma.device.findFirst({
       where: { 
@@ -438,43 +515,165 @@ router.get('/devices/:id/reports', authenticateToken, requireAdmin, async (req: 
   }
 });
 
-// routes/admin.ts
-router.get('/orders', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+// Get order reports with advanced filtering
+router.get('/orders', async (req, res, next) => {
   try {
-    const { startDate, endDate, status } = req.query;
-
+    const { 
+      page = 1, 
+      limit = 50, 
+      status, 
+      userId, 
+      from, 
+      to,
+      search 
+    } = req.query;
+    
+    const skip = (Number(page) - 1) * Number(limit);
     const where: any = {};
 
-    // Filter by payment status
-    if (status && status !== 'all') {
-      where.status = status.toUpperCase(); // match PaymentStatus enum
+    if (status && status !== 'ALL') {
+      where.status = status;
     }
 
-    // Filter by date range
-    if (startDate && endDate) {
-      where.createdAt = {
-        gte: new Date(startDate as string),
-        lte: new Date(endDate as string),
-      };
+    if (userId) {
+      where.userId = userId;
     }
 
-    const payments = await prisma.payment.findMany({
-      where,
-      include: {
-        user: true,
-        subscription: {
-          include: {
-            plan: true,
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from as string);
+      if (to) where.createdAt.lte = new Date(to as string);
+    }
+
+    if (search) {
+      where.OR = [
+        { orderId: { contains: search as string } },
+        { user: { name: { contains: search as string } } },
+        { user: { email: { contains: search as string } } }
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
           },
+      plan: { select: { id: true, name: true, deviceLimit: true, durationDays: true } }
         },
-      },
-      orderBy: { createdAt: 'desc' },
+        skip,
+        take: Number(limit),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.payment.count({ where })
+    ]);
+
+    // Calculate summary statistics
+    const [totalRevenue, completedOrders, failedOrders, pendingOrders] = await Promise.all([
+      prisma.payment.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { amount: true }
+      }),
+      prisma.payment.count({ where: { status: 'COMPLETED' } }),
+      prisma.payment.count({ where: { status: 'FAILED' } }),
+      prisma.payment.count({ where: { status: 'PENDING' } })
+    ]);
+
+    const totalStats = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      _count: { _all: true }
     });
 
-    res.json({ success: true, data: payments });
+    const summary = {
+      totalRevenue: totalRevenue._sum.amount || 0,
+      completedOrders,
+      failedOrders,
+      pendingOrders,
+      averageOrderValue: totalStats._count._all > 0 ? (totalStats._sum.amount || 0) / totalStats._count._all : 0
+    };
+
+    res.json({ 
+      orders,
+      summary,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
   } catch (error) {
-    console.error("Order Reports Error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch order reports" });
+    next(error);
+  }
+});
+// admin router (already has authenticateToken & requireAdmin)
+router.get('/orders/:orderId/invoice', async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    // Fetch the payment for ANY user
+    const payment = await prisma.payment.findFirst({
+      where: { orderId },   // ✅ no userId restriction
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        plan: { select: { name: true, deviceLimit: true, durationDays: true } }
+      }
+    });
+
+    if (!payment) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const invoiceData = InvoiceGenerator.createInvoiceData(
+      payment,
+      payment.user,
+      payment.plan
+    );
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=invoice_${invoiceData.invoiceNumber}.pdf`
+    );
+
+    const doc = new PDFDocument({ margin: 50 });
+    doc.pipe(res);
+
+    // ----- PDF HEADER -----
+    doc.fontSize(22).text('INVOICE', { align: 'center' }).moveDown();
+    doc.fontSize(12).text(`Invoice Number: ${invoiceData.invoiceNumber}`);
+    doc.text(`Invoice Date: ${invoiceData.createdAt.toDateString()}`);
+    doc.text(`Order ID: ${invoiceData.orderId}`).moveDown();
+
+    // ----- CUSTOMER INFO -----
+    doc.fontSize(14).text('Billed To:');
+    doc.fontSize(12)
+      .text(`Name: ${invoiceData.customer.name}`)
+      .text(`Email: ${invoiceData.customer.email}`)
+      .moveDown();
+
+    // ----- ORDER DETAILS -----
+    doc.fontSize(14).text('Order Details:');
+    doc.fontSize(12)
+      .text(`Description: ${invoiceData.description || 'N/A'}`)
+      .text(`Plan: ${invoiceData.plan ? invoiceData.plan.name : 'N/A'}`)
+      .text(`Device Limit: ${invoiceData.plan?.deviceLimit || '-'}`)
+      .text(`Duration: ${invoiceData.plan?.durationDays || '-'} days`)
+      .moveDown();
+
+    // ----- AMOUNT -----
+    doc.fontSize(14).text('Payment Summary:');
+    doc.fontSize(12)
+      .text(`Amount: ${invoiceData.amount} ${invoiceData.currency}`)
+      .text(`Status: ${invoiceData.status}`)
+      .moveDown();
+
+    doc.text('Thank you for your business!', { align: 'center' });
+
+    doc.end();
+  } catch (error) {
+    next(error);
   }
 });
 

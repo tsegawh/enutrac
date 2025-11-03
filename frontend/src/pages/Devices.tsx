@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, MapPin, Clock, Wifi, WifiOff, Trash2, Edit, BarChart3 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, MapPin, Wifi, WifiOff, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import DeviceMap from '../components/DeviceMap';
 import AddDeviceModal from '../components/AddDeviceModal';
-import DeviceReportsModal from '../components/DeviceReportsModal';
+//import DeviceReportsModal from '../components/DeviceReportsModal';
 import { useSocket } from '../contexts/SocketContext';
 
 interface Device {
@@ -28,7 +28,7 @@ export default function Devices() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
-  const [selectedDeviceForReports, setSelectedDeviceForReports] = useState<Device | null>(null);
+ // const [selectedDeviceForReports, setSelectedDeviceForReports] = useState<Device | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   const { subscribeToDevices, unsubscribeFromDevices } = useSocket();

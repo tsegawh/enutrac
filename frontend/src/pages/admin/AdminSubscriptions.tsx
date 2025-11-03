@@ -1,13 +1,13 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { CreditCard, Calendar, AlertTriangle } from 'lucide-react';
+import { CreditCard , AlertTriangle } from 'lucide-react';
 
 interface Subscription {
   id: string;
   status: string;
-  plan: string;
+  planId: string;
   startDate: string;
   endDate: string;
   user: {
@@ -140,7 +140,7 @@ export default function AdminSubscriptions() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-gray-900">{subscription.plan.name}</span>
+                    <span className="text-sm font-medium text-gray-900">{subscription.planId}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(subscription.status)}`}>

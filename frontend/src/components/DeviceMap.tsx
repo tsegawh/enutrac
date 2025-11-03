@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, LayersControl, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -22,6 +22,8 @@ interface Device {
   course: number | null;
   lastUpdate: string | null;
   isActive?: boolean;           // we’ll use this to ignore inactive
+   isOnline?: boolean;
+  
 }
 
 interface RoutePoint {
@@ -63,11 +65,11 @@ function getDeviceStatus(device: Device) {
 }
 
 // ---------- Custom marker ----------
-const createDeviceIcon = (online: boolean, styles?: DeviceMapStyles) =>
+const createDeviceIcon = (device: Device, online: boolean, styles?: DeviceMapStyles) =>
   L.divIcon({
     className: 'custom-device-marker',
     html: `
-      <div class="relative">
+      <div class="relative flex flex-col items-center">
         <div class="w-8 h-8 rounded-full ${
           online ? styles?.onlineColor ?? 'bg-green-500' : styles?.offlineColor ?? 'bg-gray-400'
         } border-2 border-white shadow-lg flex items-center justify-center">
@@ -80,9 +82,10 @@ const createDeviceIcon = (online: boolean, styles?: DeviceMapStyles) =>
             ? '<div class="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-ping"></div>'
             : ''
         }
+        <div class="mt-1 text-xs font-semibold text-gray-900">${device.name}</div>
       </div>
     `,
-    iconSize: [32, 32],
+    iconSize: [60, 40],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   });
@@ -93,7 +96,7 @@ function MapController({ devices, selectedDevice, routeData }: DeviceMapProps) {
 
   useEffect(() => {
     if (routeData && routeData.length > 0) {
-      const bounds = L.latLngBounds(routeData.map(p => [p.latitude, p.longitude]));
+      const bounds = L.latLngBounds( routeData.map(p => [p.latitude, p.longitude]));
       map.fitBounds(bounds, { padding: [20, 20] });
     } else if (selectedDevice && selectedDevice.latitude && selectedDevice.longitude) {
       map.setView([selectedDevice.latitude, selectedDevice.longitude], 15);
@@ -144,7 +147,7 @@ export default function DeviceMap({ devices, selectedDevice, routeData, showRout
 
   return (
     <div className="h-96 w-full relative">
-      <MapContainer ref={mapRef} center={initialView.center} zoom={initialView.zoom} className="h-full w-full rounded-lg">
+      <MapContainer ref={mapRef} center={initialView.center as [number, number]} zoom={initialView.zoom} className="h-full w-full rounded-lg">
         <LayersControl position="topleft">
           <LayersControl.BaseLayer checked name="OSM Standard">
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -202,7 +205,7 @@ export default function DeviceMap({ devices, selectedDevice, routeData, showRout
           return (
             <Marker key={d.id}
                     position={[d.latitude!, d.longitude!]}
-                    icon={createDeviceIcon(online, styles)}>
+                    icon={createDeviceIcon(d,online, styles)}>
               <Popup>
                 <div className="p-2 min-w-48">
                   <div className="flex items-center space-x-2 mb-2">

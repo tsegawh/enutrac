@@ -1,4 +1,3 @@
-import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -9,7 +8,7 @@ import {
   CreditCard,
   Database,
   BarChart3,
-  Smartphone,
+  //Smartphone,
   User,
   ShoppingCart,
 } from 'lucide-react';
@@ -28,7 +27,8 @@ const adminNavItems = [
   { name: 'Subscriptions', href: '/admin/dashboard/subscriptions', icon: CreditCard },
   { name: 'Devices', href: '/admin/dashboard/devices', icon: MapPin },
   { name: 'Payments', href: '/admin/dashboard/payments', icon: Database },
-  { name: 'Orders', href: '/admin/dashboard/orders', icon: ShoppingCart },
+  
+{ name: 'Orders', href: '/admin/dashboard/adminorders', icon: ShoppingCart },
   { name: ' Route Reports', href: '/admin/dashboard/reports', icon: BarChart3 },
   { name: 'Settings', href: '/admin/dashboard/settings', icon: Settings },
 
@@ -87,7 +87,7 @@ export default function Sidebar() {
           <div className="flex space-x-2">
             <NavLink
               to="/dashboard"
-              className={({ isActive }) =>
+              className={() =>
                 `flex-1 px-3 py-2 text-xs font-medium rounded-lg text-center transition-colors ${
                   !isAdminRoute
                     ? 'bg-primary-100 text-primary-700'
@@ -99,7 +99,7 @@ export default function Sidebar() {
             </NavLink>
             <NavLink
               to="/admin/dashboard"
-              className={({ isActive }) =>
+              className={() =>
                 `flex-1 px-3 py-2 text-xs font-medium rounded-lg text-center transition-colors ${
                   isAdminRoute
                     ? 'bg-primary-100 text-primary-700'

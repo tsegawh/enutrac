@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,40 +11,43 @@ datasource db {
 }
 
 model User {
-  id               String        @id @default(cuid())
-  email            String        @unique
+  id               String    @id @default(cuid())
+  email            String    @unique
   password         String
   name             String
-  role             Role          @default(USER)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  role             Role      @default(USER)
   resetToken       String?
   resetTokenExpiry DateTime?
-  devices          Device[]
-  payments         Payment[]
-  subscription     Subscription?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  subscription Subscription?
+  devices      Device[]
+  payments     Payment[]
 
   @@map("users")
 }
 
 model SubscriptionPlan {
-  id            String         @id @default(cuid())
-  name          String         @unique
-  deviceLimit   Int
-  durationDays  Int
-  price         Float
-  description   String?
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String   @id @default(cuid())
+  name         String   @unique
+  deviceLimit  Int
+  durationDays Int
+  price        Float
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   subscriptions Subscription[]
+  payments      Payment[] // <-- add this back relation
 
   @@map("subscription_plans")
 }
 
 model Subscription {
   id        String             @id @default(cuid())
-  userId    String             @unique
+  userId    String             @unique // remove @unique if you want multiple subscriptions per user
   planId    String
   status    SubscriptionStatus @default(ACTIVE)
   startDate DateTime           @default(now())
@@ -49,11 +55,9 @@ model Subscription {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
-  plan      SubscriptionPlan   @relation(fields: [planId], references: [id])
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payment Payment? @relation("SubscriptionPayment")
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
 
-  @@index([planId], map: "subscriptions_planId_fkey")
   @@map("subscriptions")
 }
 
@@ -71,16 +75,16 @@ model Device {
   isActive   Boolean   @default(true)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  //payment Payment?         @relation("SubscriptionPayment")
-  @@index([userId], map: "devices_userId_fkey")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("devices")
 }
 
 model Payment {
   id            String        @id @default(cuid())
   userId        String
-  subscriptionId String?       @unique
+  invoiceNumber String?       @unique
   orderId       String        @unique
   planId        String
   amount        Float
@@ -90,11 +94,12 @@ model Payment {
   prepayId      String?
   paymentMethod String?
   createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt
+  updatedAt     DateTime      @updatedAt
 
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription Subscription?  @relation("SubscriptionPayment", fields: [subscriptionId], references: [id])
-  @@index([userId], map: "payments_userId_fkey")
+  user User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id])
+
+  @@index([invoiceNumber], map: "payments_invoiceNumber_idx")
   @@map("payments")
 }
 
@@ -102,6 +107,7 @@ model Settings {
   id        String   @id @default(cuid())
   key       String   @unique
   value     String
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("settings")

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Lock, Mail, Calendar, Shield, Trash2, Save } from 'lucide-react';
+import { User, Lock, Calendar, Shield, Trash2, Save } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -245,6 +245,7 @@ export default function Account() {
                         id="email"
                         type="email"
                         value={profileData.email}
+                       readOnly
                         //onChange={(e) => handleInputChange('email', e.target.value, 'profile')}
                         className={`input ${errors.email ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
                         //placeholder="Enter your email"

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { DollarSign, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { DollarSign, Calendar, CheckCircle , Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 

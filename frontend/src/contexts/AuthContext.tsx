@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface User {
   id: string;
@@ -25,6 +26,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -40,8 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const didInit = useRef(false); // ✅ Prevent double init in strict mode
+  const navigate = useNavigate();
 
-  // Set up axios interceptor for auth token
+  // Set axios auth header whenever token changes
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -50,8 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [token]);
 
-  // Check if user is authenticated on app load
+  // Init auth only once on mount
   useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+
     const initAuth = async () => {
       if (token) {
         try {
@@ -67,30 +74,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initAuth();
-  }, [token]);
+  }, []); // ✅ Only run once, not on token change
 
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
       const { user: userData, token: authToken } = response.data;
 
-      // Set token first
       setToken(authToken);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
-      localStorage.setItem('token', authToken);
-
       setUser(userData);
+      localStorage.setItem('token', authToken);
       toast.success(`Welcome back, ${userData.name}!`);
 
-      // Redirect based on role (optional)
+      // ✅ Use navigate instead of reload
       if (userData.role === 'ADMIN') {
-        window.location.href = '/admin/dashboard';
+        navigate('/admin/dashboard');
       } else {
-        window.location.href = '/dashboard';
+        navigate('/dashboard');
       }
     } catch (error: any) {
+      const status = error.response?.status;
       const message = error.response?.data?.error || 'Login failed';
-      toast.error(message);
+
+      if (status === 429) {
+        toast.error(error.response?.data?.message);
+      } else if (status === 400 || status === 401) {
+        toast.error(message);
+      } else {
+        toast.error('Login failed');
+      }
+
       throw error;
     }
   };
@@ -103,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData);
       setToken(authToken);
       localStorage.setItem('token', authToken);
-
-      toast.success(`Welcome to Traccar Subscriptions, ${userData.name}!`);
+      toast.success(`Welcome to Enutrac Subscriptions, ${userData.name}!`);
+      navigate('/dashboard');
     } catch (error: any) {
       const message = error.response?.data?.error || 'Registration failed';
       toast.error(message);
@@ -118,11 +131,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
     toast.success('Logged out successfully');
+    navigate('/login');
   };
 
   const refreshUser = async () => {
     if (!token) return;
-
     try {
       const response = await axios.get('/auth/me');
       setUser(response.data.user);
@@ -131,18 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const value = {
-    user,
-    token,
-    login,
-    register,
-    logout,
-    loading,
-    refreshUser,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        setUser,
+        login,
+        register,
+        logout,
+        loading,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -150,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

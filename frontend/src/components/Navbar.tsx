@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link as ScrollLink, animateScroll as scroll } from "react-scroll";
 import { MapPin } from "lucide-react";
 
@@ -81,8 +81,10 @@ export default function Navbar() {
                   activeSection === item.id ? "text-primary-600" : "text-gray-600 hover:text-gray-900"
                 }`}
                 onClick={() => setIsOpen(false)}
+                {...({} as any)} 
               >
                 {item.name}
+
               </ScrollLink>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 const devices = [
   { name: "TK103", protocol: "gps103", port: "5001", help: "Set server IP and port: SERVER_IP 5001" },
@@ -50,7 +50,7 @@ export default function SupportedDevices() {
             ))
           ) : (
             <tr>
-              <td colSpan="4" className="border p-4 text-center text-gray-500">
+              <td colSpan={4} className="border p-4 text-center text-gray-500">
                 No devices found
               </td>
             </tr>

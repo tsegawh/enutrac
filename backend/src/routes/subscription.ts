@@ -21,10 +21,11 @@ router.get('/plans', async (req, res, next) => {
 });
 
 // Get current user subscription
-router.get('/current', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/current', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const subscription = await prisma.subscription.findFirst({
-  where: { userId: req.user!.id, status: 'ACTIVE' },
+  where: { userId: authReq.user!.id, status: 'ACTIVE' },
   include: {
     plan: true,
     user: {
@@ -75,10 +76,11 @@ if (!subscription) {
 });
 
 // Get subscription usage stats
-router.get('/usage', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/usage', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     let subscription = await prisma.subscription.findUnique({
-      where: { userId: req.user!.id },
+      where: { userId: authReq.user!.id },
       include: { plan: true }
     });
 
@@ -94,7 +96,7 @@ router.get('/usage', authenticateToken, async (req: AuthRequest, res, next) => {
 
         subscription = await prisma.subscription.create({
           data: {
-            userId: req.user!.id,
+            userId: authReq.user!.id,
             planId: freePlan.id,
             status: 'ACTIVE',
             endDate,
@@ -116,7 +118,7 @@ router.get('/usage', authenticateToken, async (req: AuthRequest, res, next) => {
     // Count user's devices
     const deviceCount = await prisma.device.count({
       where: { 
-        userId: req.user!.id,
+        userId: authReq.user!.id,
         isActive: true 
       }
     });
@@ -135,8 +137,9 @@ router.get('/usage', authenticateToken, async (req: AuthRequest, res, next) => {
 });
 
 // Upgrade subscription (initiate payment)
-router.post('/upgrade', authenticateToken, async (req: AuthRequest, res, next) => {
+router.post('/upgrade', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const { planId } = req.body;
 
     if (!planId) {
@@ -154,7 +157,7 @@ router.post('/upgrade', authenticateToken, async (req: AuthRequest, res, next) =
 
     // Get current subscription
     const currentSubscription = await prisma.subscription.findUnique({
-      where: { userId: req.user!.id },
+      where: { userId: authReq.user!.id },
       include: { plan: true }
     });
 
@@ -173,7 +176,7 @@ router.post('/upgrade', authenticateToken, async (req: AuthRequest, res, next) =
       endDate.setDate(endDate.getDate() + targetPlan.durationDays);
 
       await prisma.subscription.update({
-        where: { userId: req.user!.id },
+        where: { userId: authReq.user!.id },
         data: {
           planId: targetPlan.id,
           status: 'ACTIVE',
@@ -202,10 +205,11 @@ router.post('/upgrade', authenticateToken, async (req: AuthRequest, res, next) =
 });
 
 // Cancel subscription
-router.post('/cancel', authenticateToken, async (req: AuthRequest, res, next) => {
+router.post('/cancel', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const subscription = await prisma.subscription.findUnique({
-      where: { userId: req.user!.id }
+      where: { userId: authReq.user!.id }
     });
 
     if (!subscription) {

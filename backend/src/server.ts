@@ -2,10 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
+import passport from 'passport';
+import path from 'path';
 
-// Import routes
+// Middleware
+import { globalLimiter, loginLimiter} from './middleware/rateLimit';
+import { errorHandler } from './middleware/errorHandler';
+
+// Routes
 import dashboardRoutes from './routes/dashboard';
 import authRoutes from './routes/auth';
 import paymentRoutes from './routes/payment';
@@ -13,70 +19,127 @@ import subscriptionRoutes from './routes/subscription';
 import deviceRoutes from './routes/device';
 import userRoutes from './routes/user';
 import adminRoutes from './routes/admin';
-//import reportsRouter from './routes/reports';
 import invoiceRoutes from './routes/invoice';
 
-
-
-
-// Import middleware
-import { errorHandler } from './middleware/errorHandler';
-
-// Import services
+// Services
 import { initializeSocket } from './services/socket';
 import { startCronJobs } from './services/cron';
+
+// Cron jobs
+import './cron/expirePendingPayments';
 
 dotenv.config();
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_URL 
-      : ['http://localhost:5173'],
-    methods: ['GET', 'POST'],
-  },
-});
-
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : ['http://localhost:5173'],
-  credentials: true,
-}));
+const TRACCAR_URL = process.env.TRACCAR_URL || "http://localhost:8082";
+const TRACCAR_WS = TRACCAR_URL.replace(/^http/, "ws");
+
+
+// ----------------- Determine frontend origin -----------------
+const FRONTEND_ORIGIN =
+  process.env.NODE_ENV === 'production'
+    ? process.env.FRONTEND_URL || `http://localhost:${PORT}` // Vite build served by backend
+    : 'http://localhost:5173'; // Dev server
+
+// ----------------- Middleware -----------------
+app.use(
+  helmet({
+     contentSecurityPolicy: process.env.NODE_ENV === 'production'
+      ? {
+          useDefaults: true,
+          directives: {
+            "default-src": ["'self'"],
+            "script-src": ["'self'", "https://js.stripe.com"],
+            "connect-src": [
+              "'self'",
+              "https://api.stripe.com",
+              "https://js.stripe.com",
+              FRONTEND_ORIGIN,
+              TRACCAR_URL,
+              TRACCAR_WS
+            ],
+            "img-src": ["'self'", "data:","'self'",
+          'data:',
+          'https://a.tile.openstreetmap.org',
+          'https://b.tile.openstreetmap.org',
+          'https://c.tile.openstreetmap.org'],
+            "style-src": ["'self'", "'unsafe-inline'",'https://fonts.googleapis.com',
+          'https://unpkg.com'],
+            "frame-src": ["'self'", "https://js.stripe.com"],
+            fontSrc: [
+          "'self'",
+          'https://fonts.gstatic.com'
+        ],
+          },
+        }
+      : false, // disable CSP in dev
+   })
+);
+
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN,
+    credentials: true,
+  })
+);
+
+// Webhook route with raw body
+app.use('/api/payment/stripe/webhook', express.raw({ type: 'application/json' }));
+
+// JSON & URL-encoded parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Apply rate limiters
+app.use(globalLimiter);
+
+// Passport
+app.use(passport.initialize());
+
+// ----------------- Health check -----------------
+app.get('/health', (_, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// API Routes
+// ----------------- API Routes -----------------
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', loginLimiter, authRoutes); // apply login limiter
 app.use('/api/payment', paymentRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/user', userRoutes);
 app.use('/user/orders', invoiceRoutes);
-
 app.use('/api/admin', adminRoutes);
-//app.use('/api/reports', reportsRouter);
-// Error handling middleware
+
+// ----------------- Serve Vite frontend (dist) -----------------
+if (process.env.NODE_ENV === 'production') {
+  const buildPath = path.join(__dirname, '..', 'frontend_dist'); // Make sure frontend dist folder is copied here
+  app.use(express.static(buildPath));
+
+  app.get('*', (_, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+}
+
+// ----------------- Error handler -----------------
 app.use(errorHandler);
 
-// Initialize Socket.IO for real-time updates
+// ----------------- Socket.IO -----------------
+const server = createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    methods: ['GET', 'POST'],
+  },
+});
 initializeSocket(io);
 
-// Start background jobs
+// ----------------- Cron jobs -----------------
 startCronJobs();
 
+// ----------------- Start server -----------------
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 Socket.IO server initialized`);

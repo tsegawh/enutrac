@@ -9,11 +9,12 @@ const prisma = new PrismaClient();
 const traccarService = new TraccarService();
 
 // Get user devices
-router.get('/', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const devices = await prisma.device.findMany({
       where: { 
-        userId: req.user!.id,
+        userId: authReq.user!.id,
         isActive: true 
       },
       orderBy: { createdAt: 'desc' }
@@ -51,9 +52,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res, next) => {
 });
 
 // Add new device
-router.post('/', authenticateToken, async (req: AuthRequest, res, next) => {
+router.post('/', authenticateToken, async (req, res, next) => {
   try {
-    const { name, uniqueId } = req.body;
+    const authReq = req as AuthRequest;
+    const { name, uniqueId } = authReq.body;
 
     if (!name || !uniqueId) {
       throw createError('Device name and unique ID are required', 400);
@@ -61,7 +63,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res, next) => {
 
     // Check subscription limits
     const subscription = await prisma.subscription.findUnique({
-      where: { userId: req.user!.id },
+      where: { userId:authReq.user!.id },
       include: { plan: true }
     });
 
@@ -77,7 +79,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res, next) => {
     // Count current devices
     const deviceCount = await prisma.device.count({
       where: { 
-        userId: req.user!.id,
+        userId: authReq.user!.id,
         isActive: true 
       }
     });
@@ -107,7 +109,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res, next) => {
     // Create device in our database
     const device = await prisma.device.create({
       data: {
-        userId: req.user!.id,
+        userId: authReq.user!.id,
         traccarId: traccarDevice.id,
         name,
         uniqueId,
@@ -126,8 +128,9 @@ router.post('/', authenticateToken, async (req: AuthRequest, res, next) => {
 });
 
 // Update device
-router.put('/:id', authenticateToken, async (req: AuthRequest, res, next) => {
+router.put('/:id', authenticateToken, async (req ,res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const { id } = req.params;
     const { name } = req.body;
 
@@ -135,7 +138,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res, next) => {
     const device = await prisma.device.findFirst({
       where: { 
         id,
-        userId: req.user!.id 
+        userId: authReq.user!.id 
       }
     });
 
@@ -164,15 +167,16 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res, next) => {
 });
 
 // Delete device
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res, next) => {
+router.delete('/:id', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const { id } = req.params;
 
     // Find device
     const device = await prisma.device.findFirst({
       where: { 
         id,
-        userId: req.user!.id 
+        userId: authReq.user!.id 
       }
     });
 
@@ -205,8 +209,9 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res, next) => 
 });
 
 // Get device positions/history
-router.get('/:id/positions', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/:id/positions', authenticateToken, async (req, res, next) => {
   try {
+    const authReq = req as AuthRequest;
     const { id } = req.params;
     const { from, to } = req.query;
 
@@ -214,7 +219,7 @@ router.get('/:id/positions', authenticateToken, async (req: AuthRequest, res, ne
     const device = await prisma.device.findFirst({
       where: { 
         id,
-        userId: req.user!.id 
+        userId: authReq.user!.id 
       }
     });
 
@@ -237,8 +242,9 @@ router.get('/:id/positions', authenticateToken, async (req: AuthRequest, res, ne
 });
 
 // Get device reports
-router.get('/:id/reports', authenticateToken, async (req: AuthRequest, res, next) => {
+router.get('/:id/reports', authenticateToken, async (req, res, next) => {
   try {
+     const authReq = req as AuthRequest;
     const { id } = req.params;
     const { from, to } = req.query;
 
@@ -246,7 +252,7 @@ router.get('/:id/reports', authenticateToken, async (req: AuthRequest, res, next
     const device = await prisma.device.findFirst({
       where: { 
         id,
-        userId: req.user!.id 
+        userId: authReq.user!.id 
       }
     });
 
@@ -259,7 +265,7 @@ router.get('/:id/reports', authenticateToken, async (req: AuthRequest, res, next
       device.traccarId,
       from as string,
       to as string,
-      1000 // Limit for performance
+      //1000 // Limit for performance
     );
 
     // Calculate summary statistics

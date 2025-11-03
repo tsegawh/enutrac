@@ -12,6 +12,11 @@ export default function Login() {
 
   const { user, login } = useAuth();
   const location = useLocation();
+// for google OAuth2
+const handleGoogleLogin = () => {
+  window.location.href = `${import.meta.env.VITE_BACKEND_URL}/api/auth/google`;
+};
+
 
   // Redirect if already logged in
   if (user) {
@@ -133,6 +138,9 @@ export default function Login() {
               </button>
             </div>
           </div>
+<button onClick={handleGoogleLogin} className="btn btn-google">
+  Sign in with Google
+</button>
 
           {/* Forgot password link */}
           <div className="mt-6 text-center">

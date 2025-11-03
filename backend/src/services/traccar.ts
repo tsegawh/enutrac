@@ -37,7 +37,7 @@ export class TraccarService {
   private password: string;
 
   constructor() {
-    this.baseUrl = process.env.TRACCAR_URL
+    this.baseUrl = process.env.TRACCAR_URL ||'';
     this.username = process.env.TRACCAR_USER || 'admin';
     this.password = process.env.TRACCAR_PASS || 'admin';
 
@@ -161,10 +161,7 @@ export class TraccarService {
    * Get positions for device within date range
    */
   async getPositions(
-    deviceId: number,
-    from?: string,
-    to?: string
-  ): Promise<TraccarPosition[]> {
+deviceId: number, from?: string, to?: string, p0?: number  ): Promise<TraccarPosition[]> {
     try {
       const params: any = { deviceId };
       
@@ -195,6 +192,31 @@ export class TraccarService {
     } catch (error) {
       console.error('❌ Error fetching server info:', error);
       throw new Error('Failed to fetch server info from Traccar');
+    }
+  }
+  /**
+   * Fetch report from Traccar API
+   * @param type - Type of report: 'route', 'trips', 'events', etc.
+   * @param deviceId - Device ID to query
+   * @param from - ISO date string (start)
+   * @param to - ISO date string (end)
+   */
+  async getReport(
+    type: string,
+    deviceId: number,
+    from: string,
+    to: string
+  ): Promise<any> {
+     try {
+      const response = await this.client.get(`/reports/${type}`, {
+        params: { deviceId, from, to },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error("❌ Failed to fetch report from Traccar:", error.message);
+      throw new Error(
+        error.response?.data || "Failed to fetch report from Traccar"
+      );
     }
   }
 

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Settings, Save, Database, Mail, Smartphone } from 'lucide-react';
@@ -10,6 +10,9 @@ interface SystemSettings {
   emailEnabled: boolean;
   maintenanceMode: boolean;
   maxDevicesPerUser: number;
+  cronEnabled: boolean;
+ cronSchedule: string; 
+ cronCutoffHours: number; 
   subscriptionPlans: Array<{
     name: string;
     price: number;
@@ -24,6 +27,9 @@ export default function AdminSettings() {
     traccarUser: '',
     emailEnabled: false,
     maintenanceMode: false,
+    cronEnabled: false,
+    cronSchedule: '',
+    cronCutoffHours: 1, 
     maxDevicesPerUser: 5,
     subscriptionPlans: []
   });
@@ -50,7 +56,7 @@ export default function AdminSettings() {
   const saveSettings = async () => {
     try {
       setSaving(true);
-      await axios.put('/admin/settings', settings);
+      await axios.put('/admin/settings', { settings });
       toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -197,7 +203,69 @@ export default function AdminSettings() {
           </div>
         </div>
       </div>
+{/* Cron Job Settings */}
+<div className="card">
+  <div className="flex items-center space-x-3 mb-4">
+    <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+      <Database className="w-4 h-4 text-yellow-600" />
+    </div>
+    <h2 className="text-lg font-semibold text-gray-900">Cron Job Settings</h2>
+  </div>
 
+  <div className="space-y-4">
+    <div className="flex items-center space-x-3">
+      <input
+        type="checkbox"
+        id="cronEnabled"
+        checked={Boolean((settings as any).cronEnabled )|| false}
+        onChange={(e) =>
+          setSettings({ ...settings, cronEnabled: e.target.checked })
+        }
+        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+      />
+      <label htmlFor="cronEnabled" className="text-sm font-medium text-gray-700">
+        Enable automated cron jobs
+      </label>
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Schedule (Cron Expression)
+      </label>
+      <input
+        type="text"
+        value={(settings as any).cronSchedule || '0 * * * *'}
+        onChange={(e) =>
+          setSettings({ ...settings, cronSchedule: e.target.value })
+        }
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        placeholder="0 * * * *"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Example: “0 * * * *” = every hour, “*/10 * * * *” = every 10 minutes
+      </p>
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Expire PENDING Payments After (hours)
+      </label>
+      <input
+        type="number"
+        min="1"
+        max="168"
+        value={(settings as any).cronCutoffHours || 24}
+        onChange={(e) =>
+          setSettings({
+            ...settings,
+            cronCutoffHours: parseInt(e.target.value),
+          })
+        }
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+      />
+    </div>
+  </div>
+</div>
       {/* System Settings */}
       <div className="card">
         <div className="flex items-center space-x-3 mb-4">

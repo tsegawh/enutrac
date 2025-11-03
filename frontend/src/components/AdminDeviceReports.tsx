@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, MapPin, BarChart3, Download, Clock, Gauge, Route } from 'lucide-react';
 import axios from 'axios';
-import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { BarChart3, Calendar, Clock, Download, Gauge, MapPin, Route, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import DeviceMap from './DeviceMap';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -11,6 +11,8 @@ interface Device {
   name: string;
   uniqueId: string;
 userEmail?: string;
+isActive?: boolean; 
+isOnline?: boolean;
 }
 
 interface ReportSummary {
