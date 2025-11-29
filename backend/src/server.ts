@@ -6,6 +6,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
 import passport from 'passport';
 import path from 'path';
+import cookieParser from 'cookie-parser';
 
 // Middleware
 import { globalLimiter, loginLimiter} from './middleware/rateLimit';
@@ -20,14 +21,18 @@ import deviceRoutes from './routes/device';
 import userRoutes from './routes/user';
 import adminRoutes from './routes/admin';
 import invoiceRoutes from './routes/invoice';
+import statsRoute from './routes/stats';
 
 // Services
 import { initializeSocket } from './services/socket';
-import { startCronJobs } from './services/cron';
+//import { startCronJobs } from './services/cron';
 
 // Cron jobs
-import './cron/expirePendingPayments';
+//import './cron/expirePendingPayments';
+//import './cron/cronManager';
 
+// Cron Manager - NEW: Use the unified cron manager
+import { loadAllCronJobs, stopAllCronJobs } from './cron/cronManager';
 dotenv.config();
 
 const app = express();
@@ -36,12 +41,15 @@ const PORT = process.env.PORT || 3001;
 const TRACCAR_URL = process.env.TRACCAR_URL || "http://localhost:8082";
 const TRACCAR_WS = TRACCAR_URL.replace(/^http/, "ws");
 
+// Serve static files
+app.use("/assets", express.static("assets"));
+
 
 // ----------------- Determine frontend origin -----------------
 const FRONTEND_ORIGIN =
   process.env.NODE_ENV === 'production'
-    ? process.env.FRONTEND_URL || `http://localhost:${PORT}` // Vite build served by backend
-    : 'http://localhost:5173'; // Dev server
+    ? process.env.FRONTEND_URL || `https://yourdomain.com`
+    : 'http://localhost:5173';
 
 // ----------------- Middleware -----------------
 app.use(
@@ -78,6 +86,7 @@ app.use(
    })
 );
 
+app.use(cookieParser());
 app.use(
   cors({
     origin: FRONTEND_ORIGIN,
@@ -112,10 +121,11 @@ app.use('/api/device', deviceRoutes);
 app.use('/api/user', userRoutes);
 app.use('/user/orders', invoiceRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/stats', statsRoute);
 
 // ----------------- Serve Vite frontend (dist) -----------------
 if (process.env.NODE_ENV === 'production') {
-  const buildPath = path.join(__dirname, '..', 'frontend_dist'); // Make sure frontend dist folder is copied here
+  const buildPath = path.join(__dirname, '..', '../frontend/dist'); // Make sure frontend dist folder is copied here
   app.use(express.static(buildPath));
 
   app.get('*', (_, res) => {
@@ -136,12 +146,34 @@ const io = new SocketIOServer(server, {
 });
 initializeSocket(io);
 
-// ----------------- Cron jobs -----------------
-startCronJobs();
+// ----------------- Graceful shutdown -----------------
+async function shutdown(signal: string) {
+  console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+  stopAllCronJobs(); // stop cron tasks
+  //await prisma.$disconnect(); // disconnect DB
+  server.close(() => {
+    console.log("Server closed");
+    process.exit(0);
+  });
+}
 
-// ----------------- Start server -----------------
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Socket.IO server initialized`);
-  console.log(`⏰ Background jobs started`);
-});
+// ----------------- Cron jobs -----------------
+//startCronJobs();
+//loadAllCronJobs();
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// ----------------- Start server with async cron -----------------
+(async () => {
+  try {
+    await loadAllCronJobs();
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📡 Socket.IO server initialized`);
+      console.log(`⏰ Background cron jobs loaded`);
+    });
+  } catch (err) {
+    console.error('❌ Failed to initialize cron jobs:', err);
+    process.exit(1);
+  }
+})();

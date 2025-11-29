@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -24,148 +24,219 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  login: (email: string, password: string,rememberMe?: boolean) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
   refreshUser: () => Promise<void>;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Configure axios defaults
+// Axios defaults
 axios.defaults.baseURL = '/api';
+axios.defaults.withCredentials = true; // send cookies automatically
+
+// Axios response interceptor for better error handling
+axios.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    // Don't log 401 errors as they're normal for unauthenticated users
+    if (error.response?.status !== 401) {
+      console.error('API Error:', error.response?.status, error.response?.data);
+    }
+    return Promise.reject(error);
+  }
+);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
-  const didInit = useRef(false); // ✅ Prevent double init in strict mode
+  const didInit = useRef(false);
   const navigate = useNavigate();
 
-  // Set axios auth header whenever token changes
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-    }
-  }, [token]);
-
-  // Init auth only once on mount
+  // Initialize user on app mount
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
 
     const initAuth = async () => {
-      if (token) {
-        try {
-          const response = await axios.get('/auth/me');
-          setUser(response.data.user);
-        } catch (error) {
+      try {
+         // Try refreshing access token first
+      await axios.post('/auth/refresh', {}, { withCredentials: true });
+
+        const response = await axios.get('/auth/me');
+        
+        setUser(response.data.user);
+      } catch (error: any) {
+        // 401 is expected when no user is logged in - don't treat as error
+        if (error.response?.status === 401) {
+          console.log('No user logged in (expected)');
+        
+        } else {
           console.error('Auth check failed:', error);
-          localStorage.removeItem('token');
-          setToken(null);
         }
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initAuth();
-  }, []); // ✅ Only run once, not on token change
+  }, []);
 
-  const login = async (email: string, password: string) => {
+  // Login function
+  const login = async (email: string, password: string,rememberMe: boolean = true) => {
     try {
-      const response = await axios.post('/auth/login', { email, password });
-      const { user: userData, token: authToken } = response.data;
-
-      setToken(authToken);
+      setLoading(true);
+      const response = await axios.post<{ user: User; message: string ;token: string}>('/auth/login', { email, password ,rememberMe},{ withCredentials: true } );
+      const { user: userData } = response.data;
       setUser(userData);
-      localStorage.setItem('token', authToken);
-      toast.success(`Welcome back, ${userData.name}!`);
 
-      // ✅ Use navigate instead of reload
+
+      toast.success(`Welcome back, ${userData.name}!`);
+      
+      // Navigate based on role
       if (userData.role === 'ADMIN') {
-        navigate('/admin/dashboard');
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (error: any) {
       const status = error.response?.status;
-      const message = error.response?.data?.error || 'Login failed';
+      const message = error.response?.data?.message || 'Login failed';
 
       if (status === 429) {
-        toast.error(error.response?.data?.message);
+        toast.error(message || 'Too many login attempts. Please try again later.');
       } else if (status === 400 || status === 401) {
-        toast.error(message);
+        //toast.error(message || 'Invalid email or password');
+      } else if (status === 403) {
+        toast.error('Access forbidden');
       } else {
-        toast.error('Login failed');
+        toast.error('Login failed. Please try again.');
       }
-
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Register function
   const register = async (email: string, password: string, name: string) => {
     try {
-      const response = await axios.post('/auth/register', { email, password, name });
-      const { user: userData, token: authToken } = response.data;
-
+      setLoading(true);
+      const response = await axios.post<{ user: User; message: string }>('/auth/register', { 
+        email, 
+        password, 
+        name 
+      });
+      const { user: userData } = response.data;
       setUser(userData);
-      setToken(authToken);
-      localStorage.setItem('token', authToken);
+
       toast.success(`Welcome to Enutrac Subscriptions, ${userData.name}!`);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Registration failed';
+      const status = error.response?.status;
+      let message = error.response?.data?.error || 'Registration failed';
+
+      // Provide more specific error messages
+      if (status === 409) {
+        message = 'User already exists with this email';
+      } else if (status === 400) {
+        message = 'Invalid registration data';
+      }
+
       toast.error(message);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    toast.success('Logged out successfully');
-    navigate('/login');
-  };
-
-  const refreshUser = async () => {
-    if (!token) return;
+  // Logout function
+  const logout = async () => {
+    setLoading(true);
     try {
-      const response = await axios.get('/auth/me');
-      setUser(response.data.user);
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
+      await axios.post('/auth/logout', {}, { withCredentials: true });
+      setUser(null);
+    } catch (err) {
+      console.warn('Server logout failed, continuing locally');
+    } finally {
+      setLoading(false);
+      // Clear any potential stale state
+      //localStorage.removeItem('user-storage'); // if you use any local storage
+      //sessionStorage.clear();
+      
+      toast.success('Logged out successfully');
+      navigate('/login', { replace: true });
     }
+  };
+
+  // Refresh current user data
+  const refreshUser = async () => {
+    try {
+      const response = await axios.get<{ user: User }>('/auth/me');
+      setUser(response.data.user);
+    } catch (error: any) {
+      console.error('Failed to refresh user:', error);
+      // If refresh fails with 401, user is logged out
+      if (error.response?.status === 401) {
+        setUser(null);
+      }
+    }
+  };
+
+  const value: AuthContextType = {
+    user,
+    login,
+    register,
+    logout,
+    loading,
+    refreshUser,
+    setUser,
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        setUser,
-        login,
-        register,
-        logout,
-        loading,
-        refreshUser,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
+// Hook to use auth
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Optional: Protected route hook
+export function useRequireAuth(redirectTo: string = '/login') {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, loading, navigate, redirectTo]);
+
+  return { user, loading };
+}
+
+// Optional: Admin role check hook
+export function useRequireAdmin(redirectTo: string = '/dashboard') {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && user?.role !== 'ADMIN') {
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, loading, navigate, redirectTo]);
+
+  return { user, loading };
 }

@@ -1,6 +1,10 @@
 // src/middleware/rateLimiter.ts
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator as baseIpKeyGenerator } from 'express-rate-limit';
 import type { Request, Response, NextFunction } from 'express';
+/// Wrapper to satisfy TypeScript
+const ipKeyGenerator = (req: Request): string => {
+  return baseIpKeyGenerator(req as any); // cast to any to satisfy type
+};
 
 // 🔹 Global limiter: general protection
 export const globalLimiter = rateLimit({
@@ -10,6 +14,7 @@ export const globalLimiter = rateLimit({
     status: 429,
     message: 'Too many requests from this IP, please try again later.',
   },
+  keyGenerator: (req: Request) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req: Request) => {
@@ -30,6 +35,7 @@ export const loginLimiter = rateLimit({
     status: 429,
     message: 'Too many login attempts. Try again in 15 minutes.',
   },
+  keyGenerator: (req: Request) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -39,7 +45,8 @@ export const userLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   keyGenerator: (req: Request) => {
-    return (req as any).user?.id || req.ip; // Use user ID if logged in, else IP
+    const userId = (req as any).user?.id;
+    return userId ? String(userId) : ipKeyGenerator(req);
   },
   handler: (req: Request, res: Response, next: NextFunction, options) => {
     console.log('Rate limit exceeded for:', req.ip);

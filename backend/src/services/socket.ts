@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io';
 import WebSocket from 'ws';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-
+import cookie from 'cookie';
 
 const prisma = new PrismaClient();
 
@@ -20,7 +20,13 @@ export function initializeSocket(io: Server) {
   // Authentication middleware
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+       const cookieHeader = socket.handshake.headers.cookie; // get cookie string
+      if (!cookieHeader) return next(new Error('Authentication cookie required'));
+
+      // Parse cookies
+      const parsed = cookie.parse(cookieHeader);
+      const token = parsed['token']; // assuming your cookie name is 'jwt';
+      
 
       if (!token) {
         return next(new Error('Authentication token required'));
@@ -120,7 +126,17 @@ async function startTraccarWebSocket(io: Server) {
 
   console.log('🛰️ Connecting to Traccar WebSocket:', wsUrl);
 
+  
+
   try {
+
+    // ✅ ADD: Check if Traccar server is reachable first
+    const isServerAvailable = await checkTraccarServer();
+    if (!isServerAvailable) {
+      console.error('❌ Traccar server is not available, retrying in 30s...');
+      setTimeout(() => startTraccarWebSocket(io), 30000);
+      return;
+    }
     // Login to Traccar REST API first
     const res = await fetch(`${traccarUrl}/api/session`, {
       method: 'POST',
@@ -179,7 +195,7 @@ async function startTraccarWebSocket(io: Server) {
       setTimeout(() => startTraccarWebSocket(io), 30000);
     });
   } catch (error) {
-    console.error('❌ Failed to connect to Traccar WebSocket:', error);
+    console.error('❌ Failed to connect to Traccar WebSocket: check the ', error);
     setTimeout(() => startTraccarWebSocket(io), 30000);
   }
 }
@@ -253,7 +269,21 @@ async function handleDeviceUpdate(io: Server, traccarDevice: any) {
     console.error('❌ Error handling device update:', error);
   }
 }
-
+// ✅ ADD: Health check function
+async function checkTraccarServer(): Promise<boolean> {
+  const traccarUrl = process.env.TRACCAR_URL || 'http://localhost:8082';
+  
+  try {
+    const response = await fetch(`${traccarUrl}/api/server`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
+    });
+    return response.ok;
+  } catch (error) {
+    console.log('🔍 Traccar server health check failed');
+    return false;
+  }
+}
 /**
  * Emit subscription update to user
  */

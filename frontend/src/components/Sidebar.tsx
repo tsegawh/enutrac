@@ -8,10 +8,14 @@ import {
   CreditCard,
   Database,
   BarChart3,
-  //Smartphone,
   User,
   ShoppingCart,
+  X,
 } from 'lucide-react';
+
+interface SidebarProps {
+  onMobileClose?: () => void;
+}
 
 const userNavItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -27,26 +31,30 @@ const adminNavItems = [
   { name: 'Subscriptions', href: '/admin/dashboard/subscriptions', icon: CreditCard },
   { name: 'Devices', href: '/admin/dashboard/devices', icon: MapPin },
   { name: 'Payments', href: '/admin/dashboard/payments', icon: Database },
-  
-{ name: 'Orders', href: '/admin/dashboard/adminorders', icon: ShoppingCart },
-  { name: ' Route Reports', href: '/admin/dashboard/reports', icon: BarChart3 },
+  { name: 'Orders', href: '/admin/dashboard/adminorders', icon: ShoppingCart },
+  { name: 'Route Reports', href: '/admin/dashboard/reports', icon: BarChart3 },
   { name: 'Settings', href: '/admin/dashboard/settings', icon: Settings },
+];
 
- ];
-
-export default function Sidebar() {
+export default function Sidebar({ onMobileClose }: SidebarProps) {
   const { user } = useAuth();
   const location = useLocation();
 
   const isAdmin = user?.role === 'ADMIN';
   const isAdminRoute = location.pathname.startsWith('/admin');
-
   const navItems = isAdminRoute ? adminNavItems : userNavItems;
 
+  const handleNavClick = () => {
+    // Close mobile sidebar when a link is clicked
+    if (onMobileClose) {
+      onMobileClose();
+    }
+  };
+
   return (
-    <div className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col">
+    <div className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col h-full">
       {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-6 border-b border-gray-200 flex justify-between items-center">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
             <MapPin className="w-5 h-5 text-white" />
@@ -56,18 +64,27 @@ export default function Sidebar() {
             <p className="text-xs text-gray-500">GPS Tracking</p>
           </div>
         </div>
+        
+        {/* Close button for mobile */}
+        <button 
+          onClick={onMobileClose}
+          className="md:hidden p-2 rounded-lg hover:bg-gray-100"
+        >
+          <X className="w-5 h-5 text-gray-600" />
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
               key={item.name}
               to={item.href}
+              onClick={handleNavClick}
               className={({ isActive }) =>
-                `flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center space-x-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-primary-50 text-primary-700 border-r-2 border-primary-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -87,10 +104,13 @@ export default function Sidebar() {
           <div className="flex space-x-2">
             <NavLink
               to="/dashboard"
-              className={() =>
+              onClick={handleNavClick}
+              className={({ isActive }) =>
                 `flex-1 px-3 py-2 text-xs font-medium rounded-lg text-center transition-colors ${
-                  !isAdminRoute
+                  !isAdminRoute && isActive
                     ? 'bg-primary-100 text-primary-700'
+                    : !isAdminRoute
+                    ? 'bg-primary-50 text-primary-600'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`
               }
@@ -99,10 +119,13 @@ export default function Sidebar() {
             </NavLink>
             <NavLink
               to="/admin/dashboard"
-              className={() =>
+              onClick={handleNavClick}
+              className={({ isActive }) =>
                 `flex-1 px-3 py-2 text-xs font-medium rounded-lg text-center transition-colors ${
-                  isAdminRoute
+                  isAdminRoute && isActive
                     ? 'bg-primary-100 text-primary-700'
+                    : isAdminRoute
+                    ? 'bg-primary-50 text-primary-600'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`
               }

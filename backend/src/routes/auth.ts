@@ -1,6 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+//import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
@@ -11,6 +12,13 @@ import passport from "../services/googleAuth";
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+
+// 🔒 SECURITY NOTE: always ensure JWT_SECRET is defined at startup
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET not set");
+  process.exit(1);
+}
 
 // Email transporter setup
 /**const emailTransporter = nodemailer.createTransport({
@@ -23,17 +31,23 @@ const prisma = new PrismaClient();
   },
 });
 **/
+// Email transporter setup
 const emailTransporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.office365.com',
-  port: 587,
-  secure: false, // TLS will be upgraded automatically
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT || '587'),
+  secure: false, // true for 465, false for 587
   auth: {
-    user: process.env.OUTLOOK_EMAIL, // your Outlook email (e.g. yourname@outlook.com)
-    pass: process.env.OUTLOOK_PASSWORD, // your Outlook password or App Password
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
+  authMethod: "LOGIN",
+
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
   tls: {
-    ciphers: 'SSLv3',
-  },
+    rejectUnauthorized: false
+  }
 });
 
 // Register
@@ -90,19 +104,40 @@ router.post('/register', async (req, res, next) => {
         }
       });
     }
-
+ 
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET!,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
+const refreshtoken = jwt.sign(
+      { userId: user.id },
+      process.env.REFRESH_TOKEN_SECRET!,
+      { expiresIn: '30d' }
+    );
+    // ✅ Fix: send as httpOnly cookie
+     const isProduction = process.env.NODE_ENV === 'production';
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      user,
-      token,
-    });
+// access token cookie
+res.cookie('token', token, {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? 'strict' : 'lax',
+  maxAge: 15 * 60 * 1000, // 15 min
+});
+
+// refresh token cookie
+res.cookie('refreshToken', refreshtoken, {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? 'strict' : 'lax',
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+});
+ res.status(201).json({
+     message: 'User registered successfully', 
+     user }); 
+  
   } catch (error) {
     next(error);
   }
@@ -111,10 +146,10 @@ router.post('/register', async (req, res, next) => {
 // Login
 router.post('/login', loginLimiter, async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password ,rememberMe} = req.body;
 
     if (!email || !password) {
-      throw createError('Email and password are required', 400);
+       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     // Find user
@@ -130,21 +165,46 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     });
 
     if (!user) {
-      throw createError('Invalid credentials', 401);
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      throw createError('Invalid credentials', 401);
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET!,
-      { expiresIn: '7d' }
+      { expiresIn: '15m' }
     );
+    const refreshtoken = jwt.sign(
+      { userId: user.id },
+      process.env.REFRESH_TOKEN_SECRET!,
+      { expiresIn: '30d' }
+    );
+// ✅ Fix: send as httpOnly cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+
+// access token cookie
+res.cookie('token', token, {
+  httpOnly: true,
+  secure: isProduction ? true : false, // must be false in dev (localhost)
+  sameSite: isProduction ? 'strict' : 'lax', // lax works in localhost
+  maxAge: 15 * 60 * 1000, // 15 min
+  path: '/',
+});
+
+// refresh token cookie
+res.cookie('refreshToken', refreshtoken, {
+  httpOnly: true,
+  secure: isProduction ? true : false, // must be false in dev (localhost)
+  sameSite: isProduction ? 'strict' : 'lax', // lax works in localhost
+  maxAge: rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined, // undefined = session cookie
+  path: '/',
+});
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
@@ -152,7 +212,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     res.json({
       message: 'Login successful',
       user: userWithoutPassword,
-      token,
+     
     });
   } catch (error) {
     next(error);
@@ -198,9 +258,52 @@ router.get('/me', authenticateToken, async (req, res, next) => {
     next(error);
   }
 });
+router.post('/refresh', async (req, res, next) => {
+  const { refreshToken } = req.cookies;
+  if (!refreshToken) return res.status(401).json({ message: 'No refresh token' });
 
-// Logout (client-side token removal)
+  try {
+    const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET!) as JwtPayload & { userId: string };
+
+    const newAccessToken = jwt.sign(
+      { userId: payload.userId },
+      process.env.JWT_SECRET!,
+      { expiresIn: '15m' }
+    );
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('token', newAccessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+
+    res.json({ success: true });
+  } catch {
+    res.status(403).json({ message: 'Invalid refresh token' });
+  }
+});
+
+// Logout route - add same options as setting cookies
 router.post('/logout', authenticateToken, (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/',
+  });
+  
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite:isProduction ? 'strict' : 'lax',
+    path: '/',
+  });
+  
   res.json({ message: 'Logout successful' });
 });
 
@@ -240,7 +343,10 @@ router.post('/forgot-password', async (req, res, next) => {
     });
 
     // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+    const FRONTEND = process.env.FRONTEND_URL;
+
+        
+    const resetUrl = `${FRONTEND}/reset-password?token=${resetToken}`;
     
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -248,7 +354,7 @@ router.post('/forgot-password', async (req, res, next) => {
         
         <p>Hello ${user.name},</p>
         
-        <p>You requested a password reset for your Traccar account. Click the button below to reset your password:</p>
+        <p>You requested a password reset for your Enutrac account. Click the button below to reset your password:</p>
         
         <div style="text-align: center; margin: 30px 0;">
           <a href="${resetUrl}" 
@@ -264,7 +370,7 @@ router.post('/forgot-password', async (req, res, next) => {
         
         <p>If you didn't request this password reset, please ignore this email.</p>
         
-        <p>Best regards,<br>Traccar Team</p>
+        <p>Best regards,<br>Enutrac Team</p>
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
         <p style="font-size: 12px; color: #666;">
@@ -277,7 +383,7 @@ router.post('/forgot-password', async (req, res, next) => {
       await emailTransporter.sendMail({
         from: process.env.EMAIL_FROM || 'noreply@traccar.com',
         to: user.email,
-        subject: 'Password Reset Request - Traccar',
+        subject: 'Password Reset Request - Enutrac',
         html: emailHtml,
       });
     } catch (emailError) {
@@ -344,6 +450,8 @@ router.post('/reset-password', async (req, res, next) => {
     next(error);
   }
 });
+
+
 
 // --- Google OAuth2 routes ---
 router.get(

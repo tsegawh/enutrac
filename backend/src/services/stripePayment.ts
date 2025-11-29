@@ -141,12 +141,12 @@ export class StripePaymentService {
   }
 
   verifyWebhook(payload: string | Buffer, signature: string): Stripe.Event {
+    if (!this.webhookSecret) {
+    // Fail fast — do not accept webhook payloads without verification secret
+    throw new Error('STRIPE_WEBHOOK_SECRET is not configured - refusing to verify webhook');
+  }
     try {
-      if (!this.webhookSecret) {
-        console.warn('⚠️ STRIPE_WEBHOOK_SECRET not set, skipping signature verification');
-        return JSON.parse(payload.toString());
-      }
-
+      
       const event = this.stripe.webhooks.constructEvent(
         payload,
         signature,

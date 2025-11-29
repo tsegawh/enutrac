@@ -60,7 +60,11 @@ export default function Home() {
   const fetchStats = async () => {
     try {
       const response = await axios.get('/stats');
-      setStats(response.data);
+    const data = response.data.stats;
+setStats({
+      activeUsers: data.activeUsers,
+      activeDevices: data.activeDevices
+    });
     } catch (error) {
       console.error('Error fetching site stats:', error);
     } finally {

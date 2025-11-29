@@ -3,11 +3,17 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { TraccarService } from '../services/traccar';
-import PDFDocument from 'pdfkit';
+//import PDFDocument from 'pdfkit';
 import { InvoiceGenerator } from '../services/invoiceGenerator';
+//import { sendInvoiceToUser } from '../services/invoiceMailer'; 
+import { generateInvoicePDF } from "../services/invoiceTemplete";
 
-import { loadCronJob } from '../cron/expirePendingPayments'; // 
-import { sendInvoiceEmail } from '../services/mailer'; // your email file
+
+import { loadAllCronJobs, getCronJobsStatus, runCronJobManually ,sendTestEmail } from '../cron/cronManager';
+import { updateSystemStatistics } from '../cron/cronManager'; // or wherever your functions are
+
+//import { loadAllCronJobs, stopAllCronJobs, getCronJobsStatus, sendTestEmail  } from '../cron/cronManager';
+import { sendEmail } from '../services/mailer'; // your email file
 const router = express.Router();
 const prisma = new PrismaClient();
 const traccarService = new TraccarService();
@@ -223,11 +229,8 @@ router.put('/settings', async (req, res, next) => {
     }
 
     // Update each setting
- 
     for (const [key, value] of Object.entries(settings)) {
-      // Skip functions
-      //if (typeof value === 'function') continue;
-if (value === undefined || typeof value === 'function') continue;
+      if (value === undefined || typeof value === 'function') continue;
 
       let storedValue: string;
 
@@ -246,8 +249,8 @@ if (value === undefined || typeof value === 'function') continue;
       });
     }
 
-    // Reload cron job after saving
-    await loadCronJob();
+    // Reload ALL cron jobs after saving settings
+    await loadAllCronJobs();
 
     res.json({
       success: true,
@@ -258,6 +261,8 @@ if (value === undefined || typeof value === 'function') continue;
     next(error);
   }
 });
+
+// Get cron settings
 router.get('/cron-settings', async (req, res, next) => {
   try {
     const keys = [
@@ -275,7 +280,14 @@ router.get('/cron-settings', async (req, res, next) => {
     const data: Record<string, string> = {};
     settings.forEach(s => data[s.key] = s.value);
 
-    res.json({ success: true, settings: data });
+    // Add cron jobs status
+    const cronStatus = getCronJobsStatus();
+
+    res.json({ 
+      success: true, 
+      settings: data,
+      cronStatus 
+    });
   } catch (err) {
     next(err);
   }
@@ -288,7 +300,7 @@ router.put('/cron-settings', async (req, res, next) => {
     if (!settings || typeof settings !== 'object') throw new Error('Settings object is required');
 
     for (const [key, value] of Object.entries(settings)) {
-     if (value === undefined || value === null) continue;
+      if (value === undefined || value === null) continue;
       await prisma.settings.upsert({
         where: { key },
         update: { value: value.toString() }, // ensure string
@@ -296,14 +308,125 @@ router.put('/cron-settings', async (req, res, next) => {
       });
     }
 
-    await loadCronJob(); // reload cron jobs dynamically
+    await loadAllCronJobs(); // reload ALL cron jobs
 
-    res.json({ success: true, message: 'Cron settings updated successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Cron settings updated successfully' 
+    });
   } catch (err) {
     next(err);
   }
 });
 
+// Get cron jobs status
+router.get('/cron-status', async (req, res, next) => {
+  try {
+    const cronStatus = getCronJobsStatus();
+    //console.log('📊 Sending cron status to frontend:', cronStatus); // Add this log
+    res.json({ 
+      success: true, 
+      cronStatus 
+    });
+  } catch (err) {
+    console.error('Error in cron-status route:', err);
+    next(err);
+  }
+});
+
+// Manually trigger cron jobs (for testing)
+router.post('/cron/trigger/:job', async (req, res, next) => {
+  try {
+    const { job } = req.params;
+    
+    // Use the runCronJobManually function from cronManager
+    const result = await runCronJobManually(job);
+    
+    if (result.success) {
+      res.json({ 
+        success: true, 
+        message: result.message 
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Send test email
+router.post('/test-email', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email address is required'
+      });
+    }
+
+    const success = await sendTestEmail(email);
+
+    res.json({ 
+      success, 
+      message: success ? 'Test email sent successfully' : 'Failed to send test email' 
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get system statistics
+router.get('/system-stats', async (req, res, next) => {
+  try {
+    const statsSetting = await prisma.settings.findUnique({
+      where: { key: 'SYSTEM_STATS' }
+    });
+
+    let stats = {};
+    if (statsSetting?.value) {
+      try {
+        stats = JSON.parse(statsSetting.value);
+      } catch (parseError) {
+        console.error('Error parsing system stats:', parseError);
+      }
+    }
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Manually update system statistics
+router.post('/system-stats/update', async (req, res, next) => {
+  try {
+    const stats = await updateSystemStatistics();
+    
+    if (stats) {
+      res.json({
+        success: true,
+        message: 'System statistics updated successfully',
+        stats
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update system statistics'
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Get payment transactions
 router.get('/payments', async (req, res, next) => {
@@ -352,13 +475,15 @@ router.post('/send-reminders', async (req, res, next) => {
     // TODO: Implement email sending logic here
    
      for (const sub of expiringSubscriptions) {
-      await sendInvoiceEmail(
-        sub.user.email,
-        'Subscription Expiring Soon',
-        `<p>Hi ${sub.user.name},</p>
+      await sendEmail({
+  from: process.env.EMAIL_FROM || 'noreply@traccarsubscriptions.com', // optional
+  to: sub.user.email,
+  subject: 'Subscription Expiring Soon',
+  html: `<p>Hi ${sub.user.name},</p>
          <p>Your <strong>${sub.plan.name}</strong> subscription expires on ${sub.endDate.toDateString()}.</p>
-         <p>Please renew to continue using our service.</p>`
-      );
+         <p>Please renew to continue using our service.</p>`,
+});
+
     }
     res.json({ 
       success: true,
@@ -636,42 +761,14 @@ router.get('/orders/:orderId/invoice', async (req, res, next) => {
       'Content-Disposition',
       `attachment; filename=invoice_${invoiceData.invoiceNumber}.pdf`
     );
+// 3. Prepare response headers for PDF
+    const pdfBuffer = await generateInvoicePDF(invoiceData); 
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice_${invoiceData.invoiceNumber}.pdf`);
 
-    const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(res);
-
-    // ----- PDF HEADER -----
-    doc.fontSize(22).text('INVOICE', { align: 'center' }).moveDown();
-    doc.fontSize(12).text(`Invoice Number: ${invoiceData.invoiceNumber}`);
-    doc.text(`Invoice Date: ${invoiceData.createdAt.toDateString()}`);
-    doc.text(`Order ID: ${invoiceData.orderId}`).moveDown();
-
-    // ----- CUSTOMER INFO -----
-    doc.fontSize(14).text('Billed To:');
-    doc.fontSize(12)
-      .text(`Name: ${invoiceData.customer.name}`)
-      .text(`Email: ${invoiceData.customer.email}`)
-      .moveDown();
-
-    // ----- ORDER DETAILS -----
-    doc.fontSize(14).text('Order Details:');
-    doc.fontSize(12)
-      .text(`Description: ${invoiceData.description || 'N/A'}`)
-      .text(`Plan: ${invoiceData.plan ? invoiceData.plan.name : 'N/A'}`)
-      .text(`Device Limit: ${invoiceData.plan?.deviceLimit || '-'}`)
-      .text(`Duration: ${invoiceData.plan?.durationDays || '-'} days`)
-      .moveDown();
-
-    // ----- AMOUNT -----
-    doc.fontSize(14).text('Payment Summary:');
-    doc.fontSize(12)
-      .text(`Amount: ${invoiceData.amount} ${invoiceData.currency}`)
-      .text(`Status: ${invoiceData.status}`)
-      .moveDown();
-
-    doc.text('Thank you for your business!', { align: 'center' });
-
-    doc.end();
+   
+    res.end(pdfBuffer);
+    
   } catch (error) {
     next(error);
   }

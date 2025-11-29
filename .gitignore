@@ -19,6 +19,7 @@ coverage/
 # Build outputs
 dist/
 build/
+frontend_dist/
 .next/
 out/
 
@@ -27,7 +28,7 @@ out/
 .env.local
 .env.development.local
 .env.test.local
-.env.production.local
+.env.production
 
 # MacOS files
 .DS_Store

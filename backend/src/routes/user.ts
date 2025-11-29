@@ -5,6 +5,8 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import PDFDocument from 'pdfkit';
 import { InvoiceGenerator } from '../services/invoiceGenerator';
+import { sendInvoiceToUser } from '../services/invoiceMailer'; 
+import { generateInvoicePDF } from "../services/invoiceTemplete";
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -325,48 +327,18 @@ router.get('/orders/:orderId/invoice', authenticateToken, async (req, res, next)
       payment.user,
       payment.plan
     );
+   // 3. Send email **in background**
+    sendInvoiceToUser(invoiceData).catch(err => {
+      console.error("Failed to send invoice email:", err);
+    });
 
     // 3. Prepare response headers for PDF
+    const pdfBuffer = await generateInvoicePDF(invoiceData); 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=invoice_${invoiceData.invoiceNumber}.pdf`);
 
-    // 4. Create PDF document and pipe to response
-    const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(res);
-
-    // ----- PDF HEADER -----
-    doc.fontSize(22).text('INVOICE', { align: 'center' }).moveDown();
-    doc.fontSize(12).text(`Invoice Number: ${invoiceData.invoiceNumber}`);
-    doc.text(`Invoice Date: ${invoiceData.createdAt.toDateString()}`);
-    doc.text(`Order ID: ${invoiceData.orderId}`);
-    doc.moveDown();
-
-    // ----- CUSTOMER INFO -----
-    doc.fontSize(14).text('Billed To:');
-    doc.fontSize(12)
-      .text(`Name: ${invoiceData.customer.name}`)
-      .text(`Email: ${invoiceData.customer.email}`)
-      .moveDown();
-
-    // ----- ORDER DETAILS -----
-    doc.fontSize(14).text('Order Details:');
-    doc.fontSize(12)
-      .text(`Description: ${invoiceData.description || 'N/A'}`)
-      .text(`Plan: ${invoiceData.plan ? invoiceData.plan.name : 'N/A'}`)
-      .text(`Device Limit: ${invoiceData.plan?.deviceLimit || '-'}`)
-      .text(`Duration: ${invoiceData.plan?.durationDays || '-'} days`)
-      .moveDown();
-
-    // ----- AMOUNT -----
-    doc.fontSize(14).text('Payment Summary:');
-    doc.fontSize(12)
-      .text(`Amount: ${invoiceData.amount} ${invoiceData.currency}`)
-      .text(`Status: ${invoiceData.status}`)
-      .moveDown();
-
-    doc.text('Thank you for your business!', { align: 'center' });
-
-    doc.end(); // finish PDF
+   
+    res.end(pdfBuffer);
   } catch (error) {
     next(error);
   }

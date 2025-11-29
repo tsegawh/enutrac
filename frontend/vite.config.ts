@@ -1,21 +1,30 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: '0.0.0.0',
+    host: '0.0.0.0', // LAN access
     port: 5173,
+    hmr: true,
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-      
+      '192.168.0.102', // optional: allow network host
     ],
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: "http://localhost:3001", 
         changeOrigin: true,
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('Proxy error:', err);
+          });
+          // Optional hooks
+          // proxy.on('proxyReq', (proxyReq, req, _res) => {...});
+          // proxy.on('proxyRes', (proxyRes, req, _res) => {...});
+        },
       },
     },
   },

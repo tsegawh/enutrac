@@ -14,15 +14,15 @@ interface AdminStats {
 }
 
 export default function AdminDashboard() {
-  const { token, loading: authLoading } = useAuth();
+  const {  user,loading: authLoading } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && token) {
+    if (!authLoading && user) {
     fetchStats();
   }
-}, [authLoading, token]);
+}, [authLoading, user]);
 
   const fetchStats = async () => {
     try {

@@ -24,7 +24,7 @@ interface Usage {
 }
 
 export default function Dashboard() {
-  const { user, refreshUser,  token, loading: authLoading  } = useAuth();
+  const { user, refreshUser, loading: authLoading  } = useAuth();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,20 +33,27 @@ export default function Dashboard() {
   const [showStripeModal, setShowStripeModal] = useState(false);
 
   useEffect(() => {
- if (!authLoading && token) {
-    fetchData();
-}
-  }, [authLoading, token]); // ✅ run only when auth is ready and token exists
+  const init = async () => {
+    if (!authLoading && user) {
+     
+       fetchData();
+    }
+  };
+  init();
+}, [authLoading, user]); // ✅ run only when auth is ready and token exists
 
   const fetchData = async () => {
+     setLoading(true);
     try {
-      const [plansResponse, usageResponse] = await Promise.all([
+      const [plansResponse, usageResponse,currentResponse] = await Promise.all([
         axiosInstance.get('/subscription/plans'),
        axiosInstance.get('/subscription/usage'),
+        axiosInstance.get('/subscription/current'),
       ]);
 
       setPlans(plansResponse.data.plans);
       setUsage(usageResponse.data.usage);
+      setSelectedPlan(currentResponse.data.subscription); // optional, if you track it
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast.error('Failed to load dashboard data');
@@ -272,99 +279,133 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Upgrade Plans */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Upgrade Your Plan</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.map((plan) => {
-            const isCurrent = subscription?.plan.id === plan.id;
-            const isDowngrade = subscription && plan.price < subscription.plan.price;
+{/* Upgrade Plans */}
+<div className="card">
+  <div className="flex items-center justify-between mb-4">
+    <h2 className="text-lg font-semibold text-gray-900">
+      {isExpired ? "Choose a Plan to Continue" : "Upgrade Your Plan"}
+    </h2>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {plans.map((plan) => {
+      const isCurrent = subscription?.plan.id === plan.id && !isExpired;
+      const isRenewPlan = subscription?.plan.id === plan.id && isExpired;
+
+      // Determine if upgrade/downgrade is allowed
+      let isDisabled = false;
+
+      if (!isExpired && subscription?.status === "ACTIVE") {
+        if (isCurrent) {
+          isDisabled = true; // current active plan
+        } else {
+          // disable plans with price <= current plan price
+          const currentPrice = subscription.plan.price;
+          const targetPrice = plan.price;
+          if (targetPrice <= currentPrice) {
+            isDisabled = true;
+          }
+        }
+      }
+
+      const badgeClass =
+  plan.name.toLowerCase().includes("free")
+    ? "bg-gray-100 text-gray-800"       // Free
+    : plan.name.toLowerCase().includes("basic")
+    ? "bg-yellow-100 text-yellow-800"   // Basic
+    : plan.name.toLowerCase().includes("premium")
+    ? "bg-indigo-100 text-indigo-800"   // Premium
+    : "bg-gray-200 text-gray-900";      // Default (fallback)
+
+      return (
+        <div
+          key={plan.id}
+          className={`border rounded-2xl p-6 shadow-sm transition-all duration-200 cursor-pointer transform hover:scale-[1.02] ${
+            isCurrent ? "border-indigo-400 bg-indigo-50" : "border-gray-200"
+          }`}
+        >
+          <div className="text-center space-y-2">
+            <span className={`text-lg px-3 py-1 rounded-full font-medium ${badgeClass}`}>
+              {plan.name}
+            </span>
             
-            return (
-              <div
-                key={plan.id}
-                className={`border rounded-lg p-6 ${
-                  isCurrent
-                    ? 'border-primary-200 bg-primary-50'
-                    : 'border-gray-200 hover:border-primary-200'
-                } transition-colors`}
-              >
-                <div className="text-center">
-                  <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                  <div className="mt-2">
-                    <span className="text-3xl font-bold text-gray-900">
-                      {plan.price === 0 ? 'Free' : `$${plan.price}`}
-                    </span>
-                    {plan.price > 0 && (
-                      <span className="text-gray-600">/{plan.durationDays} days</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">{plan.description}</p>
-                </div>
+            <div className="flex items-baseline justify-center space-x-1">
+              <span className="text-3xl font-extrabold text-gray-900">
+                {plan.price === 0 ? "$0" : `$${plan.price}`}
+              </span>
+              {plan.price > 0 && <span className="text-gray-500 text-sm">/{plan.durationDays} days</span>}
+            </div>
+            <p className="text-sm text-gray-600">{plan.description}</p>
+          </div>
 
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Devices:</span>
-                    <span className="font-medium">{plan.deviceLimit}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Duration:</span>
-                    <span className="font-medium">{plan.durationDays} days</span>
-                  </div>
-                </div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Devices</span>
+              <span className="font-medium">{plan.deviceLimit}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Duration</span>
+              <span className="font-medium">{plan.durationDays} days</span>
+            </div>
+          </div>
 
-                <div className="mt-6 space-y-2">
-                  {isCurrent ? (
-                    <div className="btn-primary w-full opacity-50 cursor-not-allowed">
-                      Current Plan
-                    </div>
-                  ) : isDowngrade ? (
-                    <div className="btn-secondary w-full opacity-50 cursor-not-allowed">
-                      Downgrade Not Available
-                    </div>
-                  ) : (
-                    <>
-                      {plan.price > 0 ? (
-                        <>
-                          <button
-                            onClick={() => handleUpgrade(plan.id, 'stripe')}
-                            disabled={upgrading === plan.id}
-                            className="btn-primary w-full"
-                          >
-                            {upgrading === plan.id ? (
-                              <div className="flex items-center justify-center space-x-2">
-                                <div className="loading-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                <span>Processing...</span>
-                              </div>
-                            ) : (
-                              'Pay with Card (Stripe)'
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleUpgrade(plan.id, 'telebirr')}
-                            disabled={upgrading === plan.id}
-                            className="btn-secondary w-full"
-                          >
-                            Pay with Telebirr
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => handleUpgrade(plan.id)}
-                          disabled={upgrading === plan.id}
-                          className="btn-primary w-full"
-                        >
-                          Downgrade
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <div className="mt-6 space-y-2">
+            {isCurrent && (
+              <button className="btn-primary w-full opacity-60 cursor-not-allowed">
+                Current Plan
+              </button>
+            )}
+
+            {isRenewPlan && (
+              <button onClick={() => handleUpgrade(plan.id, "stripe")} className="btn-primary w-full">
+                Renew Plan
+              </button>
+            )}
+
+            {!isCurrent && !isRenewPlan && (
+              <>
+                {isDisabled ? (
+                  <button disabled className="btn-secondary w-full opacity-60 cursor-not-allowed">
+                    Upgrade Not Allowed
+                  </button>
+                ) : plan.price > 0 ? (
+                  <>
+                    <button
+                      onClick={() => handleUpgrade(plan.id, "stripe")}
+                      disabled={upgrading === plan.id}
+                      className="btn-primary w-full"
+                    >
+                      {upgrading === plan.id ? "Processing..." : "Upgrade"}
+                    </button>
+                    <button
+                      onClick={() => handleUpgrade(plan.id, "telebirr")}
+                      disabled={upgrading === plan.id}
+                      className="btn-secondary w-full"
+                    >
+                      Pay with Telebirr
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => handleUpgrade(plan.id)}
+                    disabled={upgrading === plan.id}
+                    className="btn-primary w-full"
+                  >
+                    Select Free Plan
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      );
+    })}
+  </div>
+</div>
+
+
+
+
     </div>
 
       {selectedPlan && (

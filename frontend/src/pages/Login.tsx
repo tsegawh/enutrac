@@ -9,14 +9,16 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null); // <-- add error state
+  const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
 
   const { user, login } = useAuth();
   const location = useLocation();
-// for google OAuth2
-const handleGoogleLogin = () => {
-  window.location.href = `${import.meta.env.VITE_BACKEND_URL}/api/auth/google`;
-};
 
+  // for google OAuth2
+  const handleGoogleLogin = () => {
+    window.location.href = `${import.meta.env.VITE_BACKEND_URL}/api/auth/google`;
+  };
 
   // Redirect if already logged in
   if (user) {
@@ -27,11 +29,20 @@ const handleGoogleLogin = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null); // reset error before login
 
     try {
-      await login(email, password);
-    } catch (error) {
-      // Error is handled in AuthContext
+      await login(email, password,rememberMe );
+      // optional: set success message or redirect handled in AuthContext
+    } catch (err: any) {
+      // capture the error message from backend
+      if (err.response) {
+        setError(err.response.data?.message || 'Login failed');
+      } else if (err.request) {
+        setError('Server did not respond. Please try again.');
+      } else {
+        setError('Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -56,12 +67,20 @@ const handleGoogleLogin = () => {
             <MapPin className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your Traccar account</p>
+          <p className="text-gray-600">Sign in to your Enutrac account</p>
         </div>
 
         {/* Login form */}
         <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form 
+            onSubmit={handleSubmit} 
+            className="space-y-6"
+            method="POST"
+            name="login"
+           >
+            {/* Error message display */}
+            {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+
             <div>
               <label htmlFor="email" className="label">
                 Email Address
@@ -72,6 +91,7 @@ const handleGoogleLogin = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
+                autoComplete="username"
                 placeholder="Enter your email"
                 required
               />
@@ -88,13 +108,14 @@ const handleGoogleLogin = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input pr-10"
+                  autoComplete="current-password"
                   placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                 className="absolute inset-y-0 right-0 pr-3 flex items-center"
                 >
                   {showPassword ? (
                     <EyeOff className="w-4 h-4 text-gray-400" />
@@ -104,17 +125,27 @@ const handleGoogleLogin = () => {
                 </button>
               </div>
             </div>
+            {/* Remember Me checkbox - encourages password saving */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-600">
+                  Remember me
+                </span>
+              </label>
+            </div>
 
             <button
               type="submit"
               disabled={loading}
               className="btn-primary w-full"
             >
-              {loading ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                'Sign In'
-              )}
+              {loading ? <LoadingSpinner size="sm" /> : 'Sign In'}
             </button>
           </form>
 
@@ -138,9 +169,10 @@ const handleGoogleLogin = () => {
               </button>
             </div>
           </div>
-<button onClick={handleGoogleLogin} className="btn btn-google">
-  Sign in with Google
-</button>
+
+          <button onClick={handleGoogleLogin} className="btn btn-google mt-4 w-full">
+            Sign in with Google
+          </button>
 
           {/* Forgot password link */}
           <div className="mt-6 text-center">

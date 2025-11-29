@@ -1,54 +1,47 @@
-import nodemailer from 'nodemailer';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
-import { google } from 'googleapis';
+// mailer.ts
+import nodemailer from "nodemailer";
 
-const OAuth2 = google.auth.OAuth2;
-
-const oauth2Client = new OAuth2(
-  process.env.GMAIL_CLIENT_ID!,
-  process.env.GMAIL_CLIENT_SECRET!,
-  'https://developers.google.com/oauthplayground'
-);
-
-oauth2Client.setCredentials({
-  refresh_token: process.env.GMAIL_REFRESH_TOKEN!,
-});
-
-async function createTransporter() {
-  const accessTokenResponse = await oauth2Client.getAccessToken();
-  const accessToken = accessTokenResponse?.token;
-
-  if (!accessToken) throw new Error('Failed to retrieve access token');
-
-  // Explicitly type as SMTPTransport.Options
-  const smtpOptions: SMTPTransport.Options = {
-    host: 'gmail',
-    //port: 465,
-    secure: true,
-    auth: {
-      type: 'OAuth2',
-      user: process.env.GMAIL_USER!,
-      clientId: process.env.GMAIL_CLIENT_ID!,
-      clientSecret: process.env.GMAIL_CLIENT_SECRET!,
-      refreshToken: process.env.GMAIL_REFRESH_TOKEN!,
-      accessToken,
-    },
-  };
-
-  return nodemailer.createTransport(smtpOptions);
+interface SendEmailOptions {
+  from?: string;
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: Buffer }[];
 }
 
-export async function sendInvoiceEmail(to: string, subject: string, html: string) {
+export async function createEmailTransporter() {
+  const host = process.env.EMAIL_HOST || "smtp.yourdomain.com";
+  const port = parseInt(process.env.EMAIL_PORT || "587");
+  const secure = port === 465;
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    requireTLS: port === 587,     // FORCE TLS on 587
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    tls: { rejectUnauthorized: true },
+  });
+}
+
+export async function sendEmail({ from, to, subject, html, attachments }: SendEmailOptions) {
   try {
-    const transporter = await createTransporter();
+    const transporter = await createEmailTransporter();
     await transporter.sendMail({
-      from: `Your Company <${process.env.GMAIL_USER}>`,
+      from: from ||`${process.env.APP_NAme} <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to,
       subject,
       html,
+      attachments,
     });
-    console.log(`📧 Invoice email sent to ${to}`);
-  } catch (error) {
-    console.error('❌ Failed to send invoice email:', error);
+    console.log(`✅ Email sent to ${to}`);
+  } catch (err) {
+    console.error("❌ Failed to send email:", err);
   }
 }

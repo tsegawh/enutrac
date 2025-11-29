@@ -25,7 +25,7 @@ router.get('/current', authenticateToken, async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
     const subscription = await prisma.subscription.findFirst({
-  where: { userId: authReq.user!.id, status: 'ACTIVE' },
+  where: { userId: authReq.user!.id },
   include: {
     plan: true,
     user: {
@@ -47,9 +47,9 @@ if (!subscription) {
 
     // Check if subscription is expired
     const now = new Date();
-    const isExpired = subscription.endDate < now;
+    const isExpired = subscription.endDate <now;
 
-    if (isExpired && subscription.status === 'ACTIVE') {
+    if (subscription&&isExpired && subscription.status === 'ACTIVE') {
       // Update subscription status to expired
       await prisma.subscription.update({
         where: { id: subscription.id },
@@ -79,11 +79,20 @@ if (!subscription) {
 router.get('/usage', authenticateToken, async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    let subscription = await prisma.subscription.findUnique({
+    let subscription = await prisma.subscription.findFirst({
       where: { userId: authReq.user!.id },
       include: { plan: true }
     });
+   const now = new Date();
 
+    // Check for expiry
+    if (subscription && subscription.status === 'ACTIVE' && subscription.endDate < now) {
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'EXPIRED' }
+      });
+      subscription.status = 'EXPIRED';
+    }
     // If no subscription, create free subscription
     if (!subscription) {
       const freePlan = await prisma.subscriptionPlan.findFirst({
@@ -137,6 +146,7 @@ router.get('/usage', authenticateToken, async (req, res, next) => {
 });
 
 // Upgrade subscription (initiate payment)
+// Upgrade subscription (initiate payment)
 router.post('/upgrade', authenticateToken, async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
@@ -165,9 +175,13 @@ router.post('/upgrade', authenticateToken, async (req, res, next) => {
       throw createError('No current subscription found', 404);
     }
 
-    // Check if it's actually an upgrade
-    if (targetPlan.price <= currentSubscription.plan.price) {
-      throw createError('Can only upgrade to a higher tier plan', 400);
+    // Check if current subscription is expired
+    const now = new Date();
+    const isExpired = currentSubscription.endDate < now;
+
+    // Allow same plan if expired
+    if (!isExpired && targetPlan.price <= currentSubscription.plan.price) {
+      throw createError('Can only upgrade to a higher tier plan while active', 400);
     }
 
     // For free plans, upgrade immediately

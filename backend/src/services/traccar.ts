@@ -52,6 +52,19 @@ export class TraccarService {
         'Content-Type': 'application/json',
       },
     });
+    
+    // ✅ ADD: Response interceptor for better error handling
+  this.client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.code === 'ECONNREFUSED') {
+        console.error('❌ Cannot connect to Traccar server - make sure it is running');
+      } else if (error.response?.status === 401) {
+        console.error('❌ Traccar authentication failed - check credentials');
+      }
+      return Promise.reject(error);
+    }
+  );
 
     console.log(`🛰️ Traccar service initialized: ${this.baseUrl}`);
   }

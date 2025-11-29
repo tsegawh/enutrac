@@ -15,7 +15,7 @@ import {
   StripeCheckoutRequest
 } from '../services/stripePayment';
 import { InvoiceGenerator } from '../services/invoiceGenerator';
-
+import { sendInvoiceToUser } from '../services/invoiceMailer'; 
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -29,6 +29,42 @@ const prisma = new PrismaClient();
  * 6. Telebirr calls our callback endpoint
  * 7. We verify signature and update subscription
  */
+
+//**
+ //Send payment confirmation email using your existing function
+
+async function sendPaymentConfirmationEmail(paymentId: string) {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        plan: { select: { name: true, deviceLimit: true, durationDays: true } }
+      }
+    });
+
+    if (!payment || !payment.user) {
+      console.error('Payment or user not found for email sending');
+      return;
+    }
+
+    // Create invoice data using your existing InvoiceGenerator
+    const invoiceData = InvoiceGenerator.createInvoiceData(
+      payment,
+      payment.user,
+      payment.plan
+    );
+
+    // Use your existing sendInvoiceToUser function
+    await sendInvoiceToUser(invoiceData);
+
+    console.log(`✅ Payment confirmation email sent to: ${payment.user.email}`);
+  } catch (error) {
+    console.error('❌ Failed to send payment email:', error);
+    // Don't throw - email failure shouldn't break payment flow
+  }
+}
+
 
 // Initiate payment
 router.post('/pay', authenticateToken, async (req, res, next) => {
@@ -89,9 +125,10 @@ router.post('/pay', authenticateToken, async (req, res, next) => {
         status: 'PENDING',
       }
     });
+    const FRONTEND = process.env.FRONTEND_URL;
 
-    const returnUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?orderId=${orderId}`;
-    const cancelUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel?orderId=${orderId}`;
+    const returnUrl = `${FRONTEND}/payment/success?orderId=${orderId}`;
+    const cancelUrl = `${FRONTEND}/payment/cancel?orderId=${orderId}`;
 
     if (paymentGateway === 'stripe') {
       if (useEmbedded) {
@@ -231,7 +268,7 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
       });
 
       console.log('✅ Payment successful, updating subscription');
-
+await sendPaymentConfirmationEmail(payment.id);
       let planId = session.metadata?.planId;
       if (!planId &&(payment as any).metadata) {
         try {
