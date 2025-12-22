@@ -112,7 +112,7 @@ export default function Navbar() {
   <div className="md:hidden absolute left-0 top-16 w-full bg-white shadow-md border-t z-50">
     <div className="flex flex-col gap-1 p-3">
       {menuItems.map((item) => (
-        <div key={item.id} onClick={() => setMenuOpen(false)}>
+        <div key={item.id} onClick={() => setIsOpen(false)}>
           <ScrollLink
             to={item.id}
             smooth={true}
