@@ -10,7 +10,7 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-      '192.168.0.102', // optional: allow network host
+      'https://zp1v56uxy8rdx5ypatb0ockcb9tr6a-oci3--5173--365214aa.local-credentialless.webcontainer-api.io/', // optional: allow network host
     ],
     proxy: {
       '/api': {
