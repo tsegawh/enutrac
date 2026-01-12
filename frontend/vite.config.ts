@@ -14,7 +14,7 @@ export default defineConfig({
     ],
     proxy: {
       '/api': {
-        target: "https://zp1v56uxy8rdx5ypatb0ockcb9tr6a-oci3--5173--365214aa.local-credentialless.webcontainer-api.io/", 
+        target: "http://localhost:3001/", 
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => {
