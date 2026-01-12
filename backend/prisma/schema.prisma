@@ -112,20 +112,9 @@ model Settings {
   @@map("settings")
 }
 
-enum Role {
-  USER
-  ADMIN
-}
+role String @default("USER")
 
-enum SubscriptionStatus {
-  ACTIVE
-  EXPIRED
-  CANCELLED
-}
+subscriptionStatus String @default("ACTIVE")
 
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
+paymentStatus String @default("PENDING")
+
