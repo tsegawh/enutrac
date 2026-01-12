@@ -1,4 +1,4 @@
-import { PrismaClient, Role, SubscriptionStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -55,7 +55,7 @@ async function main() {
       email: 'admin@traccar.com',
       password: hashedAdmin,
       name: 'Admin User',
-      role: Role.ADMIN,
+      role: 'ADMIN',
     },
   });
 
@@ -68,7 +68,7 @@ async function main() {
       email: 'user@test.com',
       password: hashedTest,
       name: 'Test User',
-      role: Role.USER,
+      role: 'USER',
     },
   });
 
@@ -82,7 +82,7 @@ async function main() {
     create: {
       userId: testUser.id,
       planId: freePlan.id,
-      status: SubscriptionStatus.ACTIVE,
+      status: 'ACTIVE',
       endDate: endDate,
     },
   });
