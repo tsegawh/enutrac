@@ -4,12 +4,12 @@
   "description": "Backend API for Enutrac subscription management",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon --exec tsx src/server.ts",
+    "dev": "PRISMA_QUERY_ENGINE_TYPE=wasm nodemon --exec tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "db:push": "prisma db push",
-    "db:seed": "tsx src/prisma/seed.ts",
-    "db:studio": "prisma studio",
+    "db:push": "PRISMA_QUERY_ENGINE_TYPE=wasm prisma db push",
+    "db:seed": "PRISMA_QUERY_ENGINE_TYPE=wasm tsx src/prisma/seed.ts",
+    "db:studio": "PRISMA_QUERY_ENGINE_TYPE=wasm prisma studio",
     "prod": "npm run build && NODE_ENV=production node dist/server.js"
   },
   "prisma": {

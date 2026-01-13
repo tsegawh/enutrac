@@ -46,7 +46,7 @@ export class StripePaymentService {
     }
 
     this.stripe = new Stripe(apiKey, {
-      apiVersion: '2025-09-30.clover',
+      apiVersion: '2025-10-29.clover',
     });
 
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
