@@ -1,12 +1,11 @@
 generator client {
   provider = "prisma-client-js"
-    engineType = "wasm"
+  engineType = "wasm"
 }
 
 datasource db {
- provider = "postgresql"
-  url      = "postgresql://postgres.ddatqtibramqrbxritjw:adminadmin@aws-1-us-east-1.pooler.supabase.com:5432/postgres"
-
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
