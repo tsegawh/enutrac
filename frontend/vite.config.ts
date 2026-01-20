@@ -9,7 +9,6 @@ export default defineConfig({
    hmr: {
   host: 'localhost',
 }
-
     allowedHosts: [
       'localhost',
       '127.0.0.1',
