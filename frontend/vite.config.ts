@@ -12,12 +12,12 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-     'https://1ffa66361689.ngrok-free.app',
+     'https://40e555cc907a.ngrok-free.app',
      // optional: allow network host
     ],
     proxy: {
       '/api': {
-        target: "https://1ffa66361689.ngrok-free.app", 
+        target: "https://40e555cc907a.ngrok-free.app", 
         changeOrigin: true,
         secure: false,
          cookieDomainRewrite: "localhost", // optional for cookies
