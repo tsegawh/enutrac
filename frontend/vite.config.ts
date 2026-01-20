@@ -20,7 +20,7 @@ export default defineConfig({
         target: "https://40e555cc907a.ngrok-free.app", 
         changeOrigin: true,
         secure: false,
-         cookieDomainRewrite: "localhost", // optional for cookies
+    
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('Proxy error:', err);
