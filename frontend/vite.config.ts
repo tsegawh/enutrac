@@ -12,7 +12,7 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-     ' 192.168.0.101',
+     '192.168.0.101',
      // optional: allow network host
     ],
     proxy: {
