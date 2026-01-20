@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx src/prisma/seed.ts",
     "db:studio": "prisma studio",
-    "seed":"PRISMA_CLIENT_ENGINE_TYPE=wasm prisma db seed",
+    "seed": "PRISMA_CLIENT_ENGINE_TYPE=wasm prisma db seed",
     "generate": "PRISMA_CLIENT_ENGINE_TYPE=wasm prisma generate",
     "prod": "npm run build && NODE_ENV=production node dist/server.js"
   },
