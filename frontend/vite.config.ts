@@ -6,7 +6,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // LAN access
     port: 5173,
-    hmr: true,
+   hmr: {
+  host: 'localhost',
+}
+
     allowedHosts: [
       'localhost',
       '127.0.0.1',
