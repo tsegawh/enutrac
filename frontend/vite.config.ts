@@ -20,6 +20,7 @@ export default defineConfig({
         target: "http://192.168.0.101:3001", 
         changeOrigin: true,
         secure: false,
+         cookieDomainRewrite: "localhost", // optional for cookies
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.log('Proxy error:', err);
